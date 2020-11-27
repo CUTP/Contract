@@ -30,7 +30,7 @@ class RabinAuth {
       tokenAmount = satoshiAmount / price
     }
 
-    const msg = contractId + buyerPKH + num2bin(tokenAmount, 32) + sellerPKH + num2bin(satoshiAmount, 8)
+    const msg = order.outpoint + contractId + buyerPKH + num2bin(tokenAmount, 32) + sellerPKH + num2bin(satoshiAmount, 8)
 
     console.log(msg)
 
@@ -50,7 +50,7 @@ class RabinAuth {
   }
 
   swap (order) {
-    const msg = order.contractIdA + order.buyerPKH + num2bin(order.tokenA_Amount, 32) + order.contractIdB + order.sellerPKH + num2bin(order.tokenB_Amount, 32) + num2bin(order.changeTokenB_Amount, 32)
+    const msg = order.outpoint + order.contractIdA + order.buyerPKH + num2bin(order.tokenA_Amount, 32) + order.contractIdB + order.sellerPKH + num2bin(order.tokenB_Amount, 32) + num2bin(order.changeTokenB_Amount, 32)
 
     console.log(msg)
 

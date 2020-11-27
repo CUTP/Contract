@@ -47,8 +47,11 @@ contract TokenSwap {
     require(hash160(tokenA_CodeScript) == this.tokenA_ScriptHash);
     require(hash160(tokenB_CodeScript) == this.tokenB_ScriptHash);
 
+    //outpoint (32-byte hash + 4-byte little endian)
+    bytes prevOutpoint = Util.outpoint(txPreimage);
+
     //contractId + tokenAmount(4bytes)+satoshiAmount(4bytes)
-    bytes msg = this.contractIdA + buyerPKH + num2bin(tokenA_Amount, Util.TokenValueLen) + this.contractIdB + sellerPKH + num2bin(tokenB_Amount, Util.TokenValueLen) + num2bin(changeTokenB_Amount, Util.TokenValueLen);
+    bytes msg = prevOutpoint + this.contractIdA + buyerPKH + num2bin(tokenA_Amount, Util.TokenValueLen) + this.contractIdB + sellerPKH + num2bin(tokenB_Amount, Util.TokenValueLen) + num2bin(changeTokenB_Amount, Util.TokenValueLen);
     // verify rabin signature
     require(Rabin.verifySig(msg, rabinSig, rabinPadding, this.issuer));
 

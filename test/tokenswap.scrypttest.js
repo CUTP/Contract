@@ -22,11 +22,13 @@ const inputSatoshis = 100000
 const minFee = 546
 const dummyTxId1 = '1477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
 const dummyTxId2 = '2477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
+
+const dummyTxId = 'a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
 const reversedDummyTxId = '5884e5db9de218238671572340b207ee85b628074e7e467096c267266baf77a4'
 
 const utxo = {
-  txId: dummyTxId1,
-  outputIndex: 0,
+  txId: dummyTxId,
+  outputIndex: inputIndex,
   script: '', // placeholder
   satoshis: inputSatoshis
 }
@@ -149,7 +151,8 @@ describe( 'SWAP UTXO Token', () => {
       contractIdB: contractIdB,
       sellerPKH: toHex( issuerAddress.hashBuffer ), // Mock
       tokenB_Amount: tokenSupply - 300, // Mock
-      changeTokenB_Amount: 300 // Mock
+      changeTokenB_Amount: 300, // Mock
+      outpoint: reversedDummyTxId + num2bin(inputIndex, 4) //Mock
     })
 
     console.log(order)

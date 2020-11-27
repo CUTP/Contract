@@ -25,7 +25,7 @@ const reversedDummyTxId = '5884e5db9de218238671572340b207ee85b628074e7e467096c26
 
 const utxo = {
   txId: dummyTxId,
-  outputIndex: 0,
+  outputIndex: inputIndex,
   script: '', // placeholder
   satoshis: inputSatoshis
 }
@@ -125,7 +125,8 @@ describe( 'Sale UTXO Token', () => {
       contractId: contractId,
       buyerPKH: toHex( toAddress.hashBuffer ),
       tokenAmount: tokenSupply,
-      sellerPKH: toHex( issuerAddress.hashBuffer ) // Mock
+      sellerPKH: toHex( issuerAddress.hashBuffer ), // Mock
+      outpoint: reversedDummyTxId + num2bin(inputIndex, 4) //Mock
     })
 
     console.log(order)

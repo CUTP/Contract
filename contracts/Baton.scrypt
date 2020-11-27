@@ -1,0 +1,20 @@
+import "util.scrypt";
+import "rabin.scrypt";
+
+//Baton Contract
+contract Baton {
+  Ripemd160 pubKeyHash;
+  int[4] witness;
+
+  public function issue(Sig sig, PubKey pubKey, SigHashPreimage txPreimage, int[4] rabinSig, bytes[4] rabinPadding) {
+    require(Tx.checkPreimage(txPreimage));
+
+    require(hash160(pubKey) == this.pubKeyHash);
+    require(checkSig(sig, pubKey));
+
+    //outpoint (32-byte hash + 4-byte little endian)
+    bytes prevOutpoint = Util.outpoint(txPreimage);
+    // verify rabin signature
+    require( true == Rabin.multiSig(prevOutpoint, rabinSig, rabinPadding, this.witness));
+  }
+}

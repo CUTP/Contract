@@ -1,0 +1,12 @@
+{
+    "compilerVersion": "0.1.0+commit.08c55a6",
+    "contract": "Rabin",
+    "md5": "4edd017557f95aee27e53900324da4d9",
+    "abi": [
+        {
+            "type": "constructor",
+            "params": []
+        }
+    ],
+    "asm": ""
+}

@@ -1,0 +1,85 @@
+import "util.scrypt";
+import "rabin.scrypt";
+
+contract TokenSwap {
+  Ripemd160 witnessPKH;
+  Ripemd160 tokenA_ScriptHash;
+  Ripemd160 tokenB_ScriptHash;
+  bytes contractIdA;
+  bytes contractIdB;
+  Ripemd160 issuerPKH;
+  int issuer;
+
+  function buildTokenOutput(bytes lockingScriptBody,
+    int authCount,
+    Ripemd160 ownerPKH,
+    int supply,
+    int outValue) : bytes {
+    // write Token UTXO locking script
+    // authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 53bytes(35)
+    bytes data = num2bin(authCount, 1) + ownerPKH + num2bin(supply, Util.TokenValueLen);
+    // 35<4c
+    bytes lockingScript = lockingScriptBody + num2bin(len(data), 1) + data;
+    bytes output = num2bin(outValue, Util.OutputValueLen) + Util.writeVarint(lockingScript);
+    return output;
+  }
+
+  public function swap(
+    Ripemd160 buyerPKH,
+    int tokenA_Amount,
+    Ripemd160 sellerPKH,
+    int tokenB_Amount,
+    Ripemd160 changePKH,
+    int changeTokenB_Amount,
+    int changeSatoshi,
+    int outValue,
+    bytes prevOutput,
+    bytes tokenA_CodeScript,
+    bytes tokenB_CodeScript,
+    SigHashPreimage txPreimage,
+    int rabinSig, bytes rabinPadding) {
+
+    require(tokenB_Amount > 0);
+    require(tokenA_Amount > 0);
+
+    // this ensures the preimage is for the current tx
+    require(Tx.checkPreimage(txPreimage));
+    require(hash160(tokenA_CodeScript) == this.tokenA_ScriptHash);
+    require(hash160(tokenB_CodeScript) == this.tokenB_ScriptHash);
+
+    //contractId + tokenAmount(4bytes)+satoshiAmount(4bytes)
+    bytes msg = this.contractIdA + buyerPKH + num2bin(tokenA_Amount, Util.TokenValueLen) + this.contractIdB + sellerPKH + num2bin(tokenB_Amount, Util.TokenValueLen) + num2bin(changeTokenB_Amount, Util.TokenValueLen);
+    // verify rabin signature
+    require(Rabin.verifySig(msg, rabinSig, rabinPadding, this.issuer));
+
+    //Swap Output
+    bytes output0 = Util.buildOutput(Util.scriptCode(txPreimage), outValue);
+
+    // Token A UTXO to Buyer
+    bytes output1 = this.buildTokenOutput(tokenA_CodeScript, 0, buyerPKH, tokenA_Amount, outValue);
+
+    // Token B UTXO to Seller
+    bytes output2 = this.buildTokenOutput(tokenB_CodeScript, 0, sellerPKH, tokenB_Amount, outValue);
+
+    // Token B change UTXO to changer
+    bytes output3 = this.buildTokenOutput(tokenB_CodeScript, 0, changePKH, changeTokenB_Amount, outValue);
+
+    // notify receiver output
+    bytes output4 = Util.buildNotificationOutput(buyerPKH);
+
+    // notify witness output
+    bytes output5 = Util.buildNotificationOutput(this.witnessPKH);
+
+    // the change output
+    bytes output6 = Util.buildPublicKeyHashOutput(changeSatoshi, changePKH);
+
+    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2 + output3 + output4 + output5 + output6);
+    require(hashOutputs == Util.hashOutputs(txPreimage));
+  }
+
+  public function burn(Sig sig, PubKey pubKey) {
+    require(hash160(pubKey) == this.issuerPKH);
+    require(checkSig(sig, pubKey));
+  }
+
+}

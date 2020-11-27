@@ -1,0 +1,35 @@
+import "util.scrypt";
+
+contract Rabin {
+  static function multiSig(bytes msg, int[4] sig, bytes[4] padding, int[4] pubKey) : bool {
+    int total = 0;
+    int i = 0;
+
+    loop (4) {
+      int s = sig[i];
+      if (s != 0) {
+        int n = pubKey[i];
+        int h = Util.fromLEUnsigned(this.hash(msg + padding[i]));
+        if ((s * s) % n == h % n) {
+          total = total + 1;
+        }
+      }
+
+      i = i + 1;
+    }
+
+    return(total >= Util.witnessThreshold);
+  }
+
+  static function verifySig(bytes msg, int sig, bytes padding, int n) : bool {
+    int h = Util.fromLEUnsigned(this.hash(msg + padding));
+    return((sig * sig) % n == h % n);
+  }
+
+  static function hash(bytes x) : bytes {
+    // expand into 512 bit hash
+    bytes hx = sha256(x);
+    int idx = len(hx) / 2;
+    return sha256(hx[ : idx]) + sha256(hx[idx : ]);
+  }
+}

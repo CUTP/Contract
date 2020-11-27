@@ -1,0 +1,133 @@
+import "util.scrypt";
+import "rabin.scrypt";
+
+/**
+* A Controllable NFT token protocol based on UTXO model
+*/
+contract NFT {
+  Ripemd160 witnessPKH;
+  int[4] witness;
+  int maxAuthCount;
+
+  function buildOwnerNotification(Ripemd160 ownerPKH) : bytes {
+    bytes lockingScript = Util.buildPublicKeyHashScript(ownerPKH);
+    bytes output = num2bin(Util.NOTIFY_SATOSHI, Util.OutputValueLen) + Util.writeVarint(lockingScript);
+    return output;
+  }
+
+  function buildWitnessNotification() : bytes {
+    bytes lockingScript = Util.buildPublicKeyHashScript(this.witnessPKH);
+    bytes output = num2bin(Util.NOTIFY_SATOSHI, Util.OutputValueLen) + Util.writeVarint(lockingScript);
+    return output;
+  }
+
+  function buildChangeOutput(int changeSatoshi, Ripemd160 changePKH) : bytes {
+    return changeSatoshi != 0 ? num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(Util.buildPublicKeyHashScript(changePKH)) : b'';
+  }
+
+  public function transfer(
+    Sig senderSig, 
+    PubKey senderPubKey, 
+    Ripemd160 receiverPKH, 
+    Ripemd160 changePKH, 
+    int changeSatoshi, 
+    int outValue, 
+    bytes prevOutput, 
+    SigHashPreimage txPreimage, 
+    int[4] rabinSig, bytes[4] rabinPadding) {
+
+    // this ensures the preimage is for the current tx
+    require(Tx.checkPreimage(txPreimage));
+
+    bytes lockingScript = Util.scriptCode(txPreimage);
+    int scriptLen = len(lockingScript);
+
+    // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
+    int ownerPkhStart = scriptLen - 20;
+    int countStart = ownerPkhStart - 1;
+    int expireStart = countStart - 4;
+    int contractIdStart = expireStart - 32;
+    int brfcIdStart = contractIdStart - 6;
+
+    bytes brfcId = lockingScript[brfcIdStart : contractIdStart];
+    require(brfcId == Util.NFT_TOKEN_BRFC_ID);
+
+    bytes ownerPkhBytes = lockingScript[ownerPkhStart : ];
+    Ripemd160 ownerPKH = Ripemd160(ownerPkhBytes);
+
+    // authorize
+    require(hash160(senderPubKey) == ownerPKH);
+    require(checkSig(senderSig, senderPubKey));
+    require(ownerPKH != receiverPKH);
+
+    //back trace count, zero is signed, other is not.
+    int authCount = unpack(lockingScript[countStart : ownerPkhStart]);
+
+    //outpoint (32-byte hash + 4-byte little endian)
+    bytes prevOutpoint = Util.outpoint(txPreimage);
+
+    // verify rabin signature
+    if( true == Rabin.multiSig(prevOutpoint, rabinSig, rabinPadding, this.witness)) {
+      authCount = 0;
+    } else {
+      authCount = authCount + 1;
+    }
+    require(authCount <= this.maxAuthCount && authCount <= 255);
+    require(authCount == 0);
+
+    bytes lockingScriptBody = lockingScript[ : countStart];
+
+    bytes lockingScript_ = lockingScriptBody + num2bin(authCount, 1) + receiverPKH;
+
+    bytes output0 = num2bin(outValue, Util.OutputValueLen) + Util.writeVarint(lockingScript_);
+
+    // notify receiver output
+    bytes output1 = this.buildOwnerNotification(receiverPKH);
+
+    // notify witness output
+    bytes output2 = this.buildWitnessNotification();
+
+    // the change output
+    bytes output3 = this.buildChangeOutput(changeSatoshi, changePKH);
+
+    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2 + output3);
+    require(hashOutputs == Util.hashOutputs(txPreimage));
+  }
+
+  // burn a baton or token utxo back to normal bitcoins
+  public function burn(Sig ownerSig, PubKey ownerPK, Ripemd160 changePKH, int changeSatoshi, SigHashPreimage txPreimage) {
+    // this ensures the preimage is for the current tx
+    require(Tx.checkPreimageOpt(txPreimage));
+
+    bytes lockingScript = Util.scriptCode(txPreimage);
+    int scriptLen = len(lockingScript);
+
+    // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
+    int ownerPkhStart = scriptLen - 20;
+    int countStart = ownerPkhStart - 1;
+    int expireStart = countStart - 4;
+    int contractIdStart = expireStart - 32;
+    int brfcIdStart = contractIdStart - 6;
+
+    bytes brfcId = lockingScript[brfcIdStart : contractIdStart];
+    require(brfcId == Util.NFT_TOKEN_BRFC_ID);
+
+    bytes ownerPkhBytes = lockingScript[ownerPkhStart : ];
+    Ripemd160 ownerPKH = Ripemd160(ownerPkhBytes);
+
+    // authorize
+    require(hash160(ownerPK) == ownerPKH);
+    require(checkSig(ownerSig, ownerPK));
+
+    // notify witness output
+    bytes output0 = this.buildWitnessNotification();
+
+    // send to a P2PKH script
+    bytes changeScript = Util.buildPublicKeyHashScript(changePKH);
+    bytes output1 = num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
+
+    Sha256 hashOutputs = hash256(output0 + output1);
+    require(hashOutputs == Util.hashOutputs(txPreimage));
+  }
+}
+

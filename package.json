@@ -1,0 +1,47 @@
+{
+  "name": "cutp",
+  "version": "0.0.1",
+  "description": "Controllable UTXO Token Protocol for BitcoinSV",
+  "author": "lilong <lilong@chainbow.io>",
+  "scripts": {
+    "test": "NODE_ENV=test mocha -r ts-node/register test/**/*.*test.js  --reporter spec --timeout 600000",
+    "watch": "npm run node watcher.js",
+    "lint": "eslint --ext .js ./",
+    "node": "npx babel-node"
+  },
+  "dependencies": {
+    "axios": "^0.21.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.12.8",
+    "@babel/core": "^7.12.9",
+    "@babel/node": "^7.12.6",
+    "@babel/preset-env": "^7.12.7",
+    "@babel/preset-flow": "^7.10.4",
+    "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
+    "eslint": "^7.14.0",
+    "eslint-config-standard": "^16.0.2",
+    "eslint-loader": "^4.0.2",
+    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-node": "^11.0.0",
+    "eslint-plugin-promise": "^4.0.1",
+    "eslint-plugin-standard": "^5.0.0",
+    "eslint-plugin-vue": "^7.1.0",
+    "lodash": "^4.17.20",
+    "mocha": "^8.2.1",
+    "rabinsig": "github:baryon/rabin",
+    "reify": "^0.20.12",
+    "scrypt-js": "^3.0.1",
+    "scryptlib": "github:baryon/scryptlib#preimage",
+    "tracer": "^1.1.4",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.1.2",
+    "watch": "^1.0.2"
+  },
+  "engines": {
+    "node": ">= 10.18.1",
+    "npm": ">= 6.13.4",
+    "yarn": ">= 1.21.1"
+  }
+}

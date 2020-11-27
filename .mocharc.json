@@ -1,0 +1,6 @@
+{
+  "require": [
+    "reify"
+  ],
+  "ui": "bdd"
+}

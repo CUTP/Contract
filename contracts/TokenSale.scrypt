@@ -1,0 +1,78 @@
+import "util.scrypt";
+import "rabin.scrypt";
+
+contract TokenSale {
+  bytes brfcId;
+  bytes contractId;
+  Ripemd160 witnessPKH;
+  Ripemd160 tokenCodeScriptHash;
+  Ripemd160 issuerPKH;
+  int issuer;
+
+  function buildTokenOutput(bytes lockingScriptBody,
+    int authCount,
+    Ripemd160 ownerPKH,
+    int supply,
+    int outValue) : bytes {
+    // write Token UTXO locking script
+    // authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 53bytes(35)
+    bytes data = num2bin(authCount, 1) + ownerPKH + num2bin(supply, Util.TokenValueLen);
+    // 35<4c
+    bytes lockingScript = lockingScriptBody + num2bin(len(data), 1) + data;
+    bytes output = num2bin(outValue, Util.OutputValueLen) + Util.writeVarint(lockingScript);
+    return output;
+  }
+
+  public function buy(
+    Ripemd160 buyerPKH,
+    int tokenAmount,
+    Ripemd160 sellerPKH,
+    int satoshiAmount,
+    Ripemd160 changePKH,
+    int changeSatoshi,
+    int outValue,
+    bytes prevOutput,
+    bytes tokenCodeScript,
+    SigHashPreimage txPreimage,
+    int rabinSig, bytes rabinPadding) {
+
+    require(tokenAmount > 0);
+    require(satoshiAmount > 0);
+
+    // this ensures the preimage is for the current tx
+    require(Tx.checkPreimage(txPreimage));
+    require(hash160(tokenCodeScript) == this.tokenCodeScriptHash);
+
+    //contractId + tokenAmount(4bytes)+satoshiAmount(4bytes)
+    bytes msg = this.contractId + buyerPKH + num2bin(tokenAmount, Util.TokenValueLen) + sellerPKH + num2bin(satoshiAmount, Util.OutputValueLen);
+    // verify rabin signature
+    require(Rabin.verifySig(msg, rabinSig, rabinPadding, this.issuer));
+
+    //Sale Output
+    bytes output0 = Util.buildOutput(Util.scriptCode(txPreimage), outValue);
+
+    // Token UTXO
+    bytes output1 = this.buildTokenOutput(tokenCodeScript, 0, buyerPKH, tokenAmount, outValue);
+
+    // the sale satoshi output
+    bytes output2 = Util.buildPublicKeyHashOutput(satoshiAmount, sellerPKH);
+
+    // notify receiver output
+    bytes output3 = Util.buildNotificationOutput(buyerPKH);
+
+    // notify witness output
+    bytes output4 = Util.buildNotificationOutput(this.witnessPKH);
+
+    // the change output
+    bytes output5 = Util.buildPublicKeyHashOutput(changeSatoshi, changePKH);
+
+    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2 + output3 + output4 + output5);
+    require(hashOutputs == Util.hashOutputs(txPreimage));
+  }
+
+  public function burn(Sig sig, PubKey pubKey) {
+    require(hash160(pubKey) == this.issuerPKH);
+    require(checkSig(sig, pubKey));
+  }
+
+}

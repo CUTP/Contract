@@ -31,13 +31,10 @@ const utxo = {
 const tx = new bsv.Transaction().from( utxo )
 
 const outputAmount = 222222
-
-import { RabinAuth } from './auth.mock'
-console.log(RabinAuth)
+import { witness0, witness1, witness2, getWitnessByPubKey } from './auth.mock'
 
 describe( 'Controlled UTXO Token', () => {
   let Genesis, Baton, Token, privateKey1, publicKey1, privateKey2, publicKey2
-  const rabinAuth = new RabinAuth()
 
   before( () => {
     Genesis = buildContractClass( loadTokenContractDesc( 'Genesis_desc.json' ) )
@@ -120,8 +117,12 @@ describe( 'Controlled UTXO Token', () => {
     }
 
     // 
-    const baton = new Baton(new Ripemd160(toHex(issuerAddress.hashBuffer)), rabinAuth.pubKey)
-
+    const baton = new Baton(new Ripemd160(toHex(issuerAddress.hashBuffer)), [
+      BigInt(0),
+      witness0.pubKey,
+      witness1.pubKey,
+      witness2.pubKey
+    ])
     console.log(baton.asmVars)
 
     const batonData = serializeState({
@@ -145,6 +146,33 @@ describe( 'Controlled UTXO Token', () => {
 
     tx0.addOutput( new bsv.Transaction.Output( {
       script: batonScript,
+      satoshis: holderSatoshi
+    } ) )
+
+
+    const token = new Token(
+      new Bytes(TOKEN_BRFC_ID),
+      new Bytes(contractId),
+      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ],
+      25 )
+    console.log(token.asmVars)
+
+    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
+    const tokenData = TOKEN_BRFC_ID + contractId + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( initialSupply, 32 )
+    token.setDataPart(tokenData)
+
+    token.setDataPart( tokenData )
+
+    const tokenScript = token.lockingScript
+
+    tx0.addOutput( new bsv.Transaction.Output( {
+      script: tokenScript,
       satoshis: holderSatoshi
     } ) )
 

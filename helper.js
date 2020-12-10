@@ -82,11 +82,12 @@ function hex2String ( hex ) {
 const sleep = ( ms ) => new Promise( ( resolve, _ ) => setTimeout( () => resolve(), ms ) )
 
 const UnlockingScriptSize = {
-  Initiate: 8016,
-  Issue: 8090,
-  Transfer: 8100,
-  Split: 8128,
-  Burn: 7967
+  Initiate: 106,
+  Issue: 2287,
+  Transfer: 5583,
+  Burn: 5115,
+  Sale: 7974, 
+  Swap: 13078
 }
 
 const CONTRACT_BRFC_ID = 'b02de8c88330'

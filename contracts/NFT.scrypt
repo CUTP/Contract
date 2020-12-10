@@ -5,6 +5,8 @@ import "rabin.scrypt";
 * A Controllable NFT token protocol based on UTXO model
 */
 contract NFT {
+  bytes brfcId;
+  bytes contractId;
   Ripemd160 witnessPKH;
   int[4] witness;
   int maxAuthCount;
@@ -42,15 +44,10 @@ contract NFT {
     bytes lockingScript = Util.scriptCode(txPreimage);
     int scriptLen = len(lockingScript);
 
-    // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
+    // data + dataLen(4bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
     int ownerPkhStart = scriptLen - 20;
     int countStart = ownerPkhStart - 1;
     int expireStart = countStart - 4;
-    int contractIdStart = expireStart - 32;
-    int brfcIdStart = contractIdStart - 6;
-
-    bytes brfcId = lockingScript[brfcIdStart : contractIdStart];
-    require(brfcId == Util.NFT_TOKEN_BRFC_ID);
 
     bytes ownerPkhBytes = lockingScript[ownerPkhStart : ];
     Ripemd160 ownerPKH = Ripemd160(ownerPkhBytes);
@@ -102,15 +99,10 @@ contract NFT {
     bytes lockingScript = Util.scriptCode(txPreimage);
     int scriptLen = len(lockingScript);
 
-    // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
+    // data + dataLen(4bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
     int ownerPkhStart = scriptLen - 20;
     int countStart = ownerPkhStart - 1;
     int expireStart = countStart - 4;
-    int contractIdStart = expireStart - 32;
-    int brfcIdStart = contractIdStart - 6;
-
-    bytes brfcId = lockingScript[brfcIdStart : contractIdStart];
-    require(brfcId == Util.NFT_TOKEN_BRFC_ID);
 
     bytes ownerPkhBytes = lockingScript[ownerPkhStart : ];
     Ripemd160 ownerPKH = Ripemd160(ownerPkhBytes);

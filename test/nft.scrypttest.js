@@ -71,7 +71,10 @@ describe( 'Controlled NFT-UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + expire(4bytes) + authCount(1byte) + ownerPkh(20bytes) =
-    const token = new NFT( new Ripemd160( toHex( witnessAddress.hashBuffer ) ), [
+    const token = new NFT(
+      new Bytes(NFT_TOKEN_BRFC_ID),
+      new Bytes(contractId),
+      new Ripemd160( toHex( witnessAddress.hashBuffer ) ), [
       BigInt(0),
       witness0.pubKey,
       witness1.pubKey,
@@ -89,7 +92,7 @@ describe( 'Controlled NFT-UTXO Token', () => {
     const data = Buffer.from( 'Hello NFT World'.repeat(2560), 'utf8' )
     // 
     const expire = parseInt(Date.now() / 1000 + 365 * 24 * 60 * 60 )
-    const tokenData = toHex( data ) + num2bin( data.length, 4 ) + NFT_TOKEN_BRFC_ID + contractId + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer )
+    const tokenData = toHex( data ) + num2bin( data.length, 4 ) + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer )
 
     token.setDataPart( tokenData )
     console.log( token )
@@ -109,7 +112,7 @@ describe( 'Controlled NFT-UTXO Token', () => {
     // 
     //  UTXO Token LockingScript
 
-    const newTokenData = toHex( data ) + num2bin( data.length, 4 ) + NFT_TOKEN_BRFC_ID + contractId + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( toAddress.hashBuffer )
+    const newTokenData = toHex( data ) + num2bin( data.length, 4 ) + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( toAddress.hashBuffer )
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
@@ -213,7 +216,10 @@ describe( 'Controlled NFT-UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + authCount(1byte) + ownerPkh(20bytes) =
-    const token = new NFT( new Ripemd160( toHex( witnessAddress.hashBuffer ) ), [
+    const token = new NFT(
+      new Bytes(NFT_TOKEN_BRFC_ID),
+      new Bytes(contractId),
+      new Ripemd160( toHex( witnessAddress.hashBuffer ) ), [
       BigInt(0),
       witness0.pubKey,
       witness1.pubKey,
@@ -231,7 +237,7 @@ describe( 'Controlled NFT-UTXO Token', () => {
     const data = Buffer.from( 'Hello NFT World'.repeat(2560), 'utf8' )
     // 
     const expire = parseInt(Date.now() / 1000 + 365 * 24 * 60 * 60 )
-    const tokenData = toHex( data ) + num2bin( data.length, 4 ) + NFT_TOKEN_BRFC_ID + contractId + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer )
+    const tokenData = toHex( data ) + num2bin( data.length, 4 ) + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer )
 
     token.setDataPart( tokenData )
     console.log( token )
@@ -263,7 +269,7 @@ describe( 'Controlled NFT-UTXO Token', () => {
     // 
     //  UTXO Token LockingScript
 
-    const newTokenData = toHex( data ) + num2bin( data.length, 4 ) + NFT_TOKEN_BRFC_ID + contractId + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( toAddress.hashBuffer )
+    const newTokenData = toHex( data ) + num2bin( data.length, 4 ) + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( toAddress.hashBuffer )
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
@@ -365,7 +371,10 @@ describe( 'Controlled NFT-UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     // data + dataLen(4bytes) + NFT_TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + authCount(1byte) + ownerPkh(20bytes) =
-    const token = new NFT( new Ripemd160( toHex( witnessAddress.hashBuffer ) ), [
+    const token = new NFT(
+      new Bytes(NFT_TOKEN_BRFC_ID),
+      new Bytes(contractId),
+      new Ripemd160( toHex( witnessAddress.hashBuffer ) ), [
       BigInt(0),
       witness0.pubKey,
       witness1.pubKey,
@@ -383,7 +392,7 @@ describe( 'Controlled NFT-UTXO Token', () => {
     const data = Buffer.from( 'Hello NFT World'.repeat(2560), 'utf8' )
     // 
     const expire = parseInt(Date.now() / 1000 + 365 * 24 * 60 * 60 )
-    const tokenData = toHex( data ) + num2bin( data.length, 4 ) + NFT_TOKEN_BRFC_ID + contractId + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer )
+    const tokenData = toHex( data ) + num2bin( data.length, 4 ) + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer )
 
     token.setDataPart( tokenData )
     console.log( token )
@@ -415,7 +424,7 @@ describe( 'Controlled NFT-UTXO Token', () => {
     // 
     //  UTXO Token LockingScript
 
-    const newTokenData = toHex( data ) + num2bin( data.length, 4 ) + NFT_TOKEN_BRFC_ID + contractId + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( toAddress.hashBuffer )
+    const newTokenData = toHex( data ) + num2bin( data.length, 4 ) + num2bin( expire, 4 ) + num2bin( 0, 1 ) + toHex( toAddress.hashBuffer )
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )

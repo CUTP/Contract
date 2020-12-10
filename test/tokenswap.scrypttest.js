@@ -242,7 +242,7 @@ describe( 'SWAP UTXO Token', () => {
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
     const result = swapFn.verify( context )
 
-    console.log( `SaleUnlockingScriptSize=${unlockingScript.toBuffer().length}` )
+    console.log( `SwapUnlockingScriptSize=${unlockingScript.toBuffer().length}` )
     console.log( 'Swap Size', swap.lockingScript.toHex().length / 2 )
     console.log( 'Token Size', tokenA.lockingScript.toHex().length / 2 )
 

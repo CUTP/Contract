@@ -163,11 +163,9 @@ describe( 'Controlled UTXO Token', () => {
       25 )
     console.log(token.asmVars)
 
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = TOKEN_BRFC_ID + contractId + num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( initialSupply, 32 )
+    // codePart + OP_RETURN + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
+    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( initialSupply, 32 )
     token.setDataPart(tokenData)
-
-    token.setDataPart( tokenData )
 
     const tokenScript = token.lockingScript
 

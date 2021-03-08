@@ -1,5 +1,5 @@
 # Contract
-CUTP Contracts
+CUP Token Contracts
 
 Install
 ```

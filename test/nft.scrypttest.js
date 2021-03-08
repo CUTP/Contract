@@ -1,7 +1,9 @@
 /* eslint-disable no-unused-expressions */
 const console = require( 'tracer' ).colorConsole()
 const { expect } = require( 'chai' )
-const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, STATE_LEN_4BYTES, deserializeState } = require( 'scryptlib' )
+const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, STATE_LEN_4BYTES, deserializeState,
+  num2bin, bin2num,
+ } = require( 'scryptlib' )
 const {
   string2Hex, loadTokenContractDesc, compileContract,
   CONTRACT_BRFC_ID,
@@ -12,7 +14,6 @@ const {
   NFT_TOKEN_BRFC_ID,
   NFT_SALE_BRFC_ID,
   NFT_SWAP_BRFC_ID,
-  num2bin, bin2num,
   changTxForMSB
 
 } = require( '../helper' )

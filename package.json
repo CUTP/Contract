@@ -1,6 +1,6 @@
 {
   "name": "cutp",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "Controllable UTXO Token Protocol for BitcoinSV",
   "author": "lilong <lilong@chainbow.io>",
   "scripts": {
@@ -33,7 +33,7 @@
     "rabinsig": "github:baryon/rabin",
     "reify": "^0.20.12",
     "scrypt-js": "^3.0.1",
-    "scryptlib": "github:baryon/scryptlib#asmvars",
+    "scryptlib": "^0.3.1",
     "tracer": "^1.1.4",
     "ts-node": "^9.0.0",
     "typescript": "^4.1.2",

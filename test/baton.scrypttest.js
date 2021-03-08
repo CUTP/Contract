@@ -1,14 +1,18 @@
 /* eslint-disable no-unused-expressions */
 const console = require( 'tracer' ).colorConsole()
 const { expect } = require( 'chai' )
-const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
+const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, num2bin, bin2num, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
 const {
-  string2Hex, loadTokenContractDesc, compileContract,
+  string2Hex, loadTokenContractDesc, compileContract, TokenValueLen,
   CONTRACT_BRFC_ID,
   BATON_BRFC_ID,
   TOKEN_BRFC_ID,
-  num2bin, bin2num,
-  changTxForMSB
+
+  calcChargeFee,
+
+  genesisSchema,
+  batonSchema,
+  tokenSchema
 
 } = require( '../helper' )
 
@@ -17,7 +21,7 @@ const BN = bsv.crypto.BN
 const Interpreter = bsv.Script.Interpreter
 
 const inputIndex = 0
-const inputSatoshis = 100000
+const inputSatoshis = 546
 const minFee = 546
 const dummyTxId = 'a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
 const reversedDummyTxId = '5884e5db9de218238671572340b207ee85b628074e7e467096c267266baf77a4'
@@ -64,33 +68,41 @@ describe( 'Controlled UTXO Token', () => {
     const NOTIFY_SATOSHI = 546
     const changeAddress = privateKey2.toAddress()
 
-    const batonSchema = {
-      brfc: 'bytes',
-      contractId: 'bytes'
-    }
+    //
+    const baton = new Baton(
+      new Bytes(contractId),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ])
 
-    // 
-    const baton = new Baton(new Ripemd160(toHex(issuerAddress.hashBuffer)), [
-      BigInt(0),
-      witness0.pubKey,
-      witness1.pubKey,
-      witness2.pubKey
-    ])
+    console.log(
+      new Bytes(contractId),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ]
+    )
 
     console.log(baton.asmVars)
     const asmVars = baton.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
+    // OPRETURN supply(32bytes) issuerPKH(20bytes) BRFC(6bytes)
     const batonData = serializeState({
-      brfc: BATON_BRFC_ID,
-      contractId: contractId
-    }, STATE_LEN_2BYTES, batonSchema )
-    console.log( baton )
+      supply: num2bin(initialSupply, TokenValueLen),
+      issuerPKH: toHex(issuerAddress.hashBuffer),
+      brfc: BATON_BRFC_ID
+    }, STATE_LEN_2BYTES, batonSchema)
 
     baton.setDataPart( batonData )
     console.log( baton )
@@ -100,28 +112,30 @@ describe( 'Controlled UTXO Token', () => {
 
     console.log( baton.codePart.toASM() )
     console.log( baton.dataPart.toASM() )
+    console.log( baton.dataPart.toHex() )
 
-    console.log(deserializeState(baton.dataPart.toHex(), batonSchema))
-
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
     // make a copy since it will be mutated
     const tx0 = bsv.Transaction.shallowCopy( tx )
 
-    const newBaton = new Baton(new Ripemd160(toHex(newIssuerAddress.hashBuffer)), [
-      BigInt(0),
-      witness0.pubKey,
-      witness1.pubKey,
-      witness2.pubKey
-    ])
+    const newBaton = new Baton(
+      new Bytes(contractId),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ])
 
     console.log(newBaton.asmVars)
 
     const newBatonData = serializeState({
-      brfc: BATON_BRFC_ID,
-      contractId: contractId
-    }, STATE_LEN_2BYTES, batonSchema )
-    console.log( newBaton )
-    baton.setDataPart( newBatonData )
+      supply: num2bin(initialSupply, TokenValueLen),
+      issuerPKH: toHex(newIssuerAddress.hashBuffer),
+      brfc: BATON_BRFC_ID
+    }, STATE_LEN_2BYTES, batonSchema)
+
+    newBaton.setDataPart( newBatonData )
 
     const newBatonScript = newBaton.lockingScript
 
@@ -131,9 +145,7 @@ describe( 'Controlled UTXO Token', () => {
     } ) )
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -143,8 +155,14 @@ describe( 'Controlled UTXO Token', () => {
       25 )
     console.log(token.asmVars)
 
-    // codePart + OP_RETURN + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( initialSupply, 32 )
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(initialSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
 
     console.log( token )
@@ -161,30 +179,6 @@ describe( 'Controlled UTXO Token', () => {
       script: tokenScript,
       satoshis: holderSatoshi
     } ) )
-
-    // Notify owner
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( ownerAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx0.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
-
-    // console.log(tx1.toObject())
 
     const prevLockingScript = baton.lockingScript.toASM()
 
@@ -210,6 +204,7 @@ describe( 'Controlled UTXO Token', () => {
 
     const sig = signTx( tx0, issuerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
+    console.log(`"Sig(b'${toHex( sig )}')", "PubKey(b'${toHex( issuerPubKey )})", "SigHashPreimage(b'${toHex( preimage )}')"`)
     const issueFn = baton.issue( new Sig( toHex( sig ) ), new PubKey( toHex( issuerPubKey ) ), new SigHashPreimage( toHex( preimage ) ), rabinSigs, paddingBytes )
 
     const unlockingScript = issueFn.toScript()
@@ -222,6 +217,27 @@ describe( 'Controlled UTXO Token', () => {
 
     console.log( tx0 )
 
+    // 计算所需的费用
+    // 所有输出的satoshis之和，所有输入的satoshi之和，判断交易的大小
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+    // 根据txSize计算所需的手续费
+    // feePerKb = 500
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    // 准备一个所需的费用输出
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
+
     const context = { tx: tx0, inputIndex, inputSatoshis }
     console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
     const result = issueFn.verify( context )
@@ -229,7 +245,7 @@ describe( 'Controlled UTXO Token', () => {
     console.log( `InitiateUnlockingScriptSize=${unlockingScript.toBuffer().length}` )
 
     console.log( 'Baton Size', baton.lockingScript.toHex().length / 2 )
-    // console.log( 'Token Size', token.lockingScript.toHex().length / 2 )
+    console.log( 'Token Size', token.lockingScript.toHex().length / 2 )
     console.log( 'Transaction Size', tx0.serialize().length / 2 )
 
     console.log( result )
@@ -250,26 +266,26 @@ describe( 'Controlled UTXO Token', () => {
     const NOTIFY_SATOSHI = 546
     const changeAddress = privateKey2.toAddress()
 
-    const batonSchema = {
-      brfc: 'bytes',
-      contractId: 'bytes'
-    }
-
-    // 
-    const baton = new Baton(new Ripemd160(toHex(issuerAddress.hashBuffer)), [
-      BigInt(0),
-      witness0.pubKey,
-      witness1.pubKey,
-      witness2.pubKey
-    ])
+    //
+    const baton = new Baton(
+      new Bytes(contractId),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ])
 
     console.log(baton.asmVars)
+    const asmVars = baton.asmVars
+    const witnessList = [
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
+    ]
 
-    const batonData = serializeState({
-      brfc: BATON_BRFC_ID,
-      contractId: contractId
-    }, STATE_LEN_2BYTES, batonSchema )
-    console.log( baton )
+    const batonData = [num2bin(initialSupply, TokenValueLen), toHex(issuerAddress.hashBuffer), BATON_BRFC_ID].join(' ')
 
     baton.setDataPart( batonData )
     console.log( baton )
@@ -280,27 +296,24 @@ describe( 'Controlled UTXO Token', () => {
     console.log( baton.codePart.toASM() )
     console.log( baton.dataPart.toASM() )
 
-    console.log(deserializeState(baton.dataPart.toHex(), batonSchema))
-
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
     // make a copy since it will be mutated
     const tx0 = bsv.Transaction.shallowCopy( tx )
 
-    const newBaton = new Baton(new Ripemd160(toHex(newIssuerAddress.hashBuffer)), [
-      BigInt(0),
-      witness0.pubKey,
-      witness1.pubKey,
-      witness2.pubKey
-    ])
+    const newBaton = new Baton(
+      new Bytes(contractId),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ])
 
     console.log(newBaton.asmVars)
 
-    const newBatonData = serializeState({
-      brfc: BATON_BRFC_ID,
-      contractId: contractId
-    }, STATE_LEN_2BYTES, batonSchema )
-    console.log( newBaton )
-    baton.setDataPart( newBatonData )
+    const newBatonData = [num2bin(initialSupply, TokenValueLen), toHex(newIssuerAddress.hashBuffer), BATON_BRFC_ID].join(' ')
+
+    newBaton.setDataPart( newBatonData )
 
     const newBatonScript = newBaton.lockingScript
 
@@ -309,27 +322,15 @@ describe( 'Controlled UTXO Token', () => {
       satoshis: holderSatoshi
     } ) )
 
-    // Notify owner
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( ownerAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
     // change
     // tx0.change( changeAddress )
     // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
 
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
+    // const changeSatoshi = 1000
+    // tx0.addOutput( new bsv.Transaction.Output( {
+    //   script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
+    //   satoshis: changeSatoshi
+    // } ) )
 
     // console.log(tx1.toObject())
 
@@ -365,7 +366,7 @@ describe( 'Controlled UTXO Token', () => {
       new Bytes('')
     ]
 
-    // 
+    //
     const sig = signTx( tx0, issuerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
     const issueFn = baton.issue( new Sig( toHex( sig ) ), new PubKey( toHex( issuerPubKey ) ), new SigHashPreimage( toHex( preimage ) ), rabinSigs, paddingBytes )
@@ -379,6 +380,24 @@ describe( 'Controlled UTXO Token', () => {
     tx0.inputs[ 0 ].setScript( unlockingScript )
 
     console.log( tx0 )
+
+
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+    // feePerKb = 500
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
 
     const context = { tx: tx0, inputIndex, inputSatoshis }
     console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )

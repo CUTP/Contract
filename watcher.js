@@ -1,7 +1,7 @@
 const watch = require( 'watch' )
 const { basename, join } = require( 'path' )
 const { unlinkSync, existsSync } = require( 'fs' )
-const { compileContract } = require( './helper' )
+const { compileContract } = require( 'scryptlib' )
 const { glob } = require( 'glob' )
 
 function compile_for ( file ) {
@@ -9,7 +9,11 @@ function compile_for ( file ) {
   if ( fileName.endsWith( '.scrypt' ) ) {
     try {
       clean_description_file( fileName )
-      compileContract( fileName )
+      const input = join( __dirname, 'contracts', fileName )
+      const out = join( __dirname, 'out' )
+
+      console.log(input, out)
+      compileContract( input, out )
     } catch ( error ) {
       console.log( error )
     }
@@ -19,7 +23,7 @@ function compile_for ( file ) {
 function clean_description_file ( fileName ) {
   if ( fileName.endsWith( '.scrypt' ) ) {
     try {
-      const descFile = join( __dirname, 'autoGen', fileName.replace( '.scrypt', '_desc.json' ) )
+      const descFile = join( __dirname, 'out', fileName.replace( '.scrypt', '_desc.json' ) )
       if ( existsSync( descFile ) ) {
         unlinkSync( descFile )
       }

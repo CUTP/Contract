@@ -21,82 +21,34 @@ const specList = [
     expect: '0036f9b8860f'
   },
   {
-    title: 'The Improved UTXO Fungible Token Specifications',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: 'ca1f6df355e6'
-  },
-  {
-    title: 'Contract of the Improved UTXO Fungible Token',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '3638947f96b4'
-  },
-  {
-    title: 'Baton of the Improved UTXO Fungible Token',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '8ae7d68e41af'
-  },
-  {
-    title: 'Token of the Improved UTXO Fungible Token',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '28466486dbb8'
-  },
-  {
-    title: 'The Improved UTXO Non-Fungible Token Specifications',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: 'b052da60ca22'
-  },
-  {
-    title: 'Contract of the Improved UTXO Non-Fungible Token',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '40fd856ecf73'
-  },
-  {
-    title: 'Baton of the Improved UTXO Non-Fungible Token',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '12809647c7f7'
-  },
-  {
-    title: 'Token of the Improved UTXO Non-Fungible Token',
-    author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '471037cf88fe'
-  },
-  {
     title: 'Contract of the Controlled UTXO Fungible Token',
     author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: 'b02de8c88330'
+    version: '3',
+    expect: '99b1e6a59ced'
   },
   {
     title: 'Baton of the Controlled UTXO Fungible Token',
     author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '95c087f2c67c'
+    version: '3',
+    expect: 'cc854318d187'
   },
   {
     title: 'Token of the Controlled UTXO Fungible Token',
     author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: 'd0d555f9d6d4'
+    version: '3',
+    expect: '460a852aa0ea'
   },
   {
     title: 'Sale of the Controlled UTXO Fungible Token',
     author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '4c3b48a0651e'
+    version: '3',
+    expect: 'accb4bd81142'
   },
   {
     title: 'Swap of the Controlled UTXO Fungible Token',
     author: 'LI Long (ChainBow)',
-    version: '1',
-    expect: '520d125f21e7'
+    version: '3',
+    expect: '1400fef15095'
   },
   {
     title: 'Contract of the Controlled UTXO Non-Fungible Token',
@@ -111,10 +63,22 @@ const specList = [
     expect: '5a3a78b9b744'
   },
   {
+    title: 'Token Factory of the Controlled UTXO Non-Fungible Token',
+    author: 'LI Long (ChainBow)',
+    version: '1',
+    expect: 'd8663d0d0ef4'
+  },
+  {
     title: 'Token of the Controlled UTXO Non-Fungible Token',
     author: 'LI Long (ChainBow)',
     version: '1',
     expect: 'e22200618383'
+  },
+  {
+    title: 'Token Certificate of the Controlled UTXO Non-Fungible Token',
+    author: 'LI Long (ChainBow)',
+    version: '1',
+    expect: 'c7f0eab6f355'
   },
   {
     title: 'Sale of the Controlled UTXO Non-Fungible Token',
@@ -132,7 +96,7 @@ const specList = [
     title: 'API of the Controlled UTXO Non-Fungible Token',
     author: 'LI Long (ChainBow)',
     version: '1',
-    expect: '35a30d90364c'
+    expect: 'bbf12ab68741'
   }
 
 ]

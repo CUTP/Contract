@@ -1,16 +1,21 @@
 /* eslint-disable no-unused-expressions */
 const console = require( 'tracer' ).colorConsole()
 const { expect } = require( 'chai' )
-const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
+const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, num2bin, bin2num, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
 const {
-  string2Hex, loadTokenContractDesc, compileContract,
+  string2Hex, loadTokenContractDesc, compileContract, TokenValueLen,
   CONTRACT_BRFC_ID,
   BATON_BRFC_ID,
   TOKEN_BRFC_ID,
-  num2bin, bin2num,
-  changTxForMSB
+  changTxForMSB,
+
+  genesisSchema,
+  batonSchema,
+  tokenSchema
 
 } = require( '../helper' )
+
+import { witness0, witness1, witness2, getWitnessByPubKey } from './auth.mock'
 
 const Signature = bsv.crypto.Signature
 const BN = bsv.crypto.BN
@@ -31,7 +36,6 @@ const utxo = {
 const tx = new bsv.Transaction().from( utxo )
 
 const outputAmount = 222222
-import { witness0, witness1, witness2, getWitnessByPubKey } from './auth.mock'
 
 describe( 'Controlled UTXO Token', () => {
   let Genesis, Baton, Token, privateKey1, publicKey1, privateKey2, publicKey2
@@ -49,32 +53,12 @@ describe( 'Controlled UTXO Token', () => {
     publicKey2 = bsv.PublicKey.fromPrivateKey( privateKey2 )
   } )
 
-  it( '首次发行', () => {
+  it( 'Genesis & Issue', () => {
     const issuerPrivKey = privateKey1
     const issuerAddress = privateKey1.toAddress()
     const issuerPubKey = publicKey1
 
     const witnessAddress = publicKey1.toAddress()
-
-    const genesisSchema = {
-      brfc: 'bytes',
-      name: 'string',
-      symbol: 'string',
-      issuer: 'string',
-      domain: 'string',
-      rule: 'number',
-      decimals: 'number'
-    }
-
-    const data = {
-      brfc: CONTRACT_BRFC_ID,
-      name: 'Test CUTP Token',
-      symbol: 'TFT',
-      issuer: 'ChainBow Co. Ltd.',
-      domain: 'chainbow.io',
-      rule: 0,
-      decimals: 0
-    }
 
     const genesis = new Genesis()
     const asmVarsGenesis = {
@@ -82,9 +66,16 @@ describe( 'Controlled UTXO Token', () => {
     }
     genesis.replaceAsmVars(asmVarsGenesis)
     console.log(genesis.asmVars)
-    const contractData = serializeState(data, STATE_LEN_2BYTES, genesisSchema )
-    console.log( genesis )
-
+    // OPRETURN STATE CONTRACT_BRFC_ID
+    const contractData = serializeState({
+      name: 'Test CUTP Token',
+      symbol: 'TFT',
+      issuer: 'ChainBow Co. Ltd.',
+      domain: 'chainbow.io',
+      rule: 0,
+      decimals: 0,
+      brfc: CONTRACT_BRFC_ID
+    }, STATE_LEN_2BYTES, genesisSchema)
     genesis.setDataPart( contractData )
     console.log( genesis )
 
@@ -109,27 +100,26 @@ describe( 'Controlled UTXO Token', () => {
     const NOTIFY_SATOSHI = 546
     const changeAddress = privateKey2.toAddress()
 
-    // 
-    // Baton Token LockingScript
-    const batonSchema = {
-      brfc: 'bytes',
-      contractId: 'bytes'
-    }
+    // 非标输出，0
+    // 创建 Baton Token LockingScript
 
-    // 
-    const baton = new Baton(new Ripemd160(toHex(issuerAddress.hashBuffer)), [
-      BigInt(0),
-      witness0.pubKey,
-      witness1.pubKey,
-      witness2.pubKey
-    ])
+    // 认证用公钥
+    const baton = new Baton(
+      new Bytes(contractId),
+      [
+        BigInt(0),
+        witness0.pubKey,
+        witness1.pubKey,
+        witness2.pubKey
+      ])
     console.log(baton.asmVars)
 
+    // OP_RETURN supply issuerPKH BATON_BRFC_ID
     const batonData = serializeState({
-      brfc: BATON_BRFC_ID,
-      contractId: contractId
-    }, STATE_LEN_2BYTES, batonSchema )
-    console.log( baton )
+      supply: num2bin(initialSupply, TokenValueLen),
+      issuerPKH: toHex(issuerAddress.hashBuffer),
+      brfc: BATON_BRFC_ID
+    }, STATE_LEN_2BYTES, batonSchema)
 
     baton.setDataPart( batonData )
     console.log( baton )
@@ -140,8 +130,6 @@ describe( 'Controlled UTXO Token', () => {
     console.log( baton.codePart.toASM() )
     console.log( baton.dataPart.toASM() )
 
-    console.log(deserializeState(baton.dataPart.toHex(), batonSchema))
-
     const batonScript = baton.lockingScript
 
     tx0.addOutput( new bsv.Transaction.Output( {
@@ -149,11 +137,8 @@ describe( 'Controlled UTXO Token', () => {
       satoshis: holderSatoshi
     } ) )
 
-
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -163,8 +148,14 @@ describe( 'Controlled UTXO Token', () => {
       25 )
     console.log(token.asmVars)
 
-    // codePart + OP_RETURN + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( initialSupply, 32 )
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(initialSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(issuerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
 
     const tokenScript = token.lockingScript
@@ -183,7 +174,6 @@ describe( 'Controlled UTXO Token', () => {
     // console.log(tx1.toObject())
     const prevLockingScript = genesis.lockingScript.toASM()
 
-    // 
     const sig = signTx( tx0, issuerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
     const initiateFn = genesis.initiate( new Sig( toHex( sig ) ), new PubKey( toHex( issuerPubKey ) ) )
@@ -206,6 +196,7 @@ describe( 'Controlled UTXO Token', () => {
 
     console.log( 'Genesis Size', genesis.lockingScript.toHex().length / 2 )
     console.log( 'Baton Size', baton.lockingScript.toHex().length / 2 )
+    console.log( 'Token Size', token.lockingScript.toHex().length / 2 )
     console.log( 'Transaction Size', tx0.serialize().length / 2 )
 
     console.log( result )

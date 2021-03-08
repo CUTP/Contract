@@ -1,0 +1,43 @@
+{
+    "version": 2,
+    "compilerVersion": "0.3.2+commit.eb5b607",
+    "contract": "Genesis",
+    "md5": "b5dd7c4863800f03be787430da2c6e36",
+    "structs": [],
+    "alias": [],
+    "abi": [
+        {
+            "type": "function",
+            "name": "initiate",
+            "index": 0,
+            "params": [
+                {
+                    "name": "sig",
+                    "type": "Sig",
+                    "finalType": "Sig"
+                },
+                {
+                    "name": "pubKey",
+                    "type": "PubKey",
+                    "finalType": "PubKey"
+                }
+            ]
+        },
+        {
+            "type": "constructor",
+            "params": []
+        }
+    ],
+    "file": "file:///Users/lilong/Works/CUTP/Contract/contracts/Genesis.scrypt",
+    "asm": "OP_DUP OP_HASH160 $Genesis.initiate.pkh OP_EQUALVERIFY OP_CHECKSIG",
+    "sources": [
+        "/Users/lilong/Works/CUTP/Contract/contracts/Genesis.scrypt"
+    ],
+    "sourceMap": [
+        "0:5:7:5:13",
+        "0:6:7:6:17",
+        "0:7:7:7:11",
+        "0:8:7:8:21",
+        "0:9:7:9:18"
+    ]
+}

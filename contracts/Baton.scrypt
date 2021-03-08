@@ -3,18 +3,32 @@ import "rabin.scrypt";
 
 //Baton Contract
 contract Baton {
-  Ripemd160 pubKeyHash;
-  int[4] witness;
+  bytes contractId;
+  int[4] witnesses;
 
   public function issue(Sig sig, PubKey pubKey, SigHashPreimage txPreimage, int[4] rabinSig, bytes[4] rabinPadding) {
-    require(Tx.checkPreimage(txPreimage));
+    SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+    // this ensures the preimage is for the current tx
+    require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
-    require(hash160(pubKey) == this.pubKeyHash);
+    bytes scriptCode = Util.scriptCode(txPreimage);
+    int scriptLen = len(scriptCode);
+
+    //OPRETUNR + '20' + supply(32bytes) + '14' + issuerPKH(20bytes) + '06' + brfc(6bytes) + '02' + stateLen(2bytes)
+
+    int stateLenStart = scriptLen - 3;
+    int brfcStart = stateLenStart - 7;
+    require(scriptCode[brfcStart : stateLenStart] == Util.BATON_BRFC_ID);
+
+    // PublickKeyHash's len is 20bytes
+    int pkhStart = brfcStart - 20; //
+    Ripemd160 issuerPKH = Ripemd160(scriptCode[pkhStart: brfcStart]);
+    require(hash160(pubKey) == issuerPKH);
     require(checkSig(sig, pubKey));
 
     //outpoint (32-byte hash + 4-byte little endian)
     bytes prevOutpoint = Util.outpoint(txPreimage);
     // verify rabin signature
-    require( true == Rabin.multiSig(prevOutpoint, rabinSig, rabinPadding, this.witness));
+    require(true == Rabin.multiSig(prevOutpoint, rabinSig, rabinPadding, this.witnesses));
   }
 }

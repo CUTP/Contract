@@ -1,0 +1,18 @@
+{
+    "version": 2,
+    "compilerVersion": "0.3.2+commit.eb5b607",
+    "contract": "Rabin",
+    "md5": "45315342cbf456e19b44343858bd6acc",
+    "structs": [],
+    "alias": [],
+    "abi": [
+        {
+            "type": "constructor",
+            "params": []
+        }
+    ],
+    "file": "file:///Users/lilong/Works/CUTP/Contract/contracts/rabin.scrypt",
+    "asm": "",
+    "sources": [],
+    "sourceMap": []
+}

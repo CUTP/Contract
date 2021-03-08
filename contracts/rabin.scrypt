@@ -1,6 +1,6 @@
 import "util.scrypt";
 
-contract Rabin {
+library Rabin {
   static function multiSig(bytes msg, int[4] sig, bytes[4] padding, int[4] pubKey) : bool {
     int total = 0;
     int i = 0;
@@ -18,7 +18,7 @@ contract Rabin {
       i = i + 1;
     }
 
-    return(total >= Util.witnessThreshold);
+    return(total >= Util.WitnessThreshold);
   }
 
   static function verifySig(bytes msg, int sig, bytes padding, int n) : bool {

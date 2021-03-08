@@ -1,4 +1,4 @@
-contract Util {
+library Util {
   // number of bytes to denote some numeric value
   static int DataLen = 1;
   // number of bytes to denote length serialized state, including varint prefix (1 byte) + length (2 bytes)
@@ -22,19 +22,21 @@ contract Util {
   //Notify Satoshi amount
   static int NOTIFY_SATOSHI = 546;
 
-  static int witnessThreshold = 2;
+  static int WitnessThreshold = 2;
 
-  static bytes CONTRACT_BRFC_ID = b'b02de8c88330';
-  static bytes BATON_BRFC_ID = b'95c087f2c67c';
-  static bytes TOKEN_BRFC_ID = b'd0d555f9d6d4';
-  static bytes SALE_BRFC_ID = b'4c3b48a0651e';
-  static bytes SWAP_BRFC_ID = b'520d125f21e7';
+  static bytes CONTRACT_BRFC_ID = b'0699b1e6a59ced';
+  static bytes BATON_BRFC_ID = b'06cc854318d187';
+  static bytes TOKEN_BRFC_ID = b'06460a852aa0ea';
+  static bytes SALE_BRFC_ID = b'06accb4bd81142';
+  static bytes SWAP_BRFC_ID = b'061400fef15095';
 
-  static bytes NFT_CONTRACT_BRFC_ID = b'dacdd94bfb3e';
-  static bytes NFT_BATON_BRFC_ID = b'5a3a78b9b744';
-  static bytes NFT_TOKEN_BRFC_ID = b'e22200618383';
-  static bytes NFT_SALE_BRFC_ID = b'a2d7f217c2c0';
-  static bytes NFT_SWAP_BRFC_ID = b'35a30d90364c';
+  static bytes NFT_CONTRACT_BRFC_ID = b'06dacdd94bfb3e';
+  static bytes NFT_BATON_BRFC_ID = b'065a3a78b9b744';
+  static bytes NFT_FACTORY_BRFC_ID = b'06d8663d0d0ef4';
+  static bytes NFT_TOKEN_BRFC_ID = b'06e22200618383';
+  static bytes NFT_CERT_BRFC_ID = b'06c7f0eab6f355';
+  static bytes NFT_SALE_BRFC_ID = b'06a2d7f217c2c0';
+  static bytes NFT_SWAP_BRFC_ID = b'0635a30d90364c';
 
   static function buildNotificationOutput(Ripemd160 ownerPKH) : bytes {
     bytes lockingScript = Util.buildPublicKeyHashScript(ownerPKH);
@@ -46,236 +48,215 @@ contract Util {
     return satoshi != 0 ? Util.buildOutput(Util.buildPublicKeyHashScript(pkh), satoshi) : b'';
   }
 
-  // convert signed integer `n` to unsigned integer of `l` bytes, in little endian
-  static function toLEUnsigned(int n, int l) : bytes {
-    // one extra byte to accommodate possible negative sign byte
-    bytes m = num2bin(n, l + 1);
-    // remove sign byte
-    return m[0 : len(m) - 1];
-  }
+    // convert signed integer `n` to unsigned integer of `l` bytes, in little endian
+	static function toLEUnsigned(int n, int l): bytes {
+		// one extra byte to accommodate possible negative sign byte
+		bytes m = num2bin(n, l + 1);
+		// remove sign byte
+		return m[0 : len(m) - 1];
+	}
 
-  // convert bytes to unsigned integer, in sign-magnitude little endian
-  static function fromLEUnsigned(bytes b) : int {
-    // append positive sign byte. This does not hurt even when sign bit is already positive
-    return unpack(b + b'00');
-  }
+	// convert bytes to unsigned integer, in sign-magnitude little endian
+    static function fromLEUnsigned(bytes b): int {
+		// append positive sign byte. This does not hurt even when sign bit is already positive
+		return unpack(b + b'00');
+	}
 
-  // build P2PKH script from public key hash
-  static function buildPublicKeyHashScript(Ripemd160 pubKeyHash) : bytes {
-    return OpCode.OP_DUP + OpCode.OP_HASH160 + pack(Util.PubKeyHashLen) /* "OP_PUSHDATA0" */
-    +
-    pubKeyHash + OpCode.OP_EQUALVERIFY + OpCode.OP_CHECKSIG;
-  }
+	// build P2PKH script from public key hash
+	static function buildPublicKeyHashScript(Ripemd160 pubKeyHash): bytes {
+	 	return OpCode.OP_DUP + OpCode.OP_HASH160 + pack(Util.PubKeyHashLen) /* "OP_PUSHDATA0" */ +
+		 		pubKeyHash + OpCode.OP_EQUALVERIFY + OpCode.OP_CHECKSIG;
+	}
 
-  // build a tx output from its script and satoshi amount
-  static function buildOutput(bytes outputScript, int outputSatoshis) : bytes {
-    return num2bin(outputSatoshis, Util.OutputValueLen) + Util.writeVarint(outputScript);
-  }
+	// build a tx output from its script and satoshi amount
+	static function buildOutput(bytes outputScript, int outputSatoshis): bytes {
+		return num2bin(outputSatoshis, Util.OutputValueLen) + Util.writeVarint(outputScript);
+	}
 
-  // wrapper for OP_PUSH_TX with customized sighash type
-  static function checkPreimageSigHashType(SigHashPreimage txPreimage, SigHashType sigHashType) : bool {
-    // The following arguments can be generated using sample code at
-    // https://gist.github.com/scrypt-sv/f6882be580780a88984cee75dd1564c4.js
-    PrivKey privKey = PrivKey(0x621de38d9af72be8585d19584e3954d3fd0dc9752bb9f9fb28c4f9ed7c1e40ea);
-    PubKey pubKey = PubKey(b'02773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d179291921');
-    // invK is the modular inverse of k, the ephemeral key
-    int invK = 0xa2103f96554aba49bbf581738d3b5a38c5a44b6238ffb54cfcca65b8c87ddc08;
-    // r is x coordinate of R, which is kG
-    int r = 0x00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60;
-    // rBigEndian is the signed magnitude representation of r, in big endian
-    bytes rBigEndian = b'00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60';
+	// wrapper for OP_PUSH_TX with customized sighash type
+	static function checkPreimageSigHashType(SigHashPreimage txPreimage, SigHashType sigHashType): bool {
+        // The following arguments can be generated using sample code at
+        // https://gist.github.com/scrypt-sv/f6882be580780a88984cee75dd1564c4.js
+        PrivKey privKey = PrivKey(0x621de38d9af72be8585d19584e3954d3fd0dc9752bb9f9fb28c4f9ed7c1e40ea);
+        PubKey pubKey = PubKey(b'02773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d179291921');
+        // invK is the modular inverse of k, the ephemeral key
+        int invK = 0xa2103f96554aba49bbf581738d3b5a38c5a44b6238ffb54cfcca65b8c87ddc08;
+        // r is x coordinate of R, which is kG
+        int r = 0x00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60;
+        // rBigEndian is the signed magnitude representation of r, in big endian
+        bytes rBigEndian = b'00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60';
 
-    return Tx.checkPreimageAdvanced(txPreimage, privKey, pubKey, invK, r, rBigEndian, sigHashType);
-  }
+        return Tx.checkPreimageAdvanced(txPreimage, privKey, pubKey, invK, r, rBigEndian, sigHashType);
+	}
 
-  // serialize state size in fixed length
-  static function encodeStateSize(bytes state, int stateLen) : bytes {
-    return num2bin(len(state), stateLen );
-  }
+	// serialize state size in fixed length
+	static function encodeStateSize(bytes state): bytes {
+		return num2bin(len(state), Util.STATE_LEN_2BYTES /* varint prefix byte */);
+	}
 
-  // get the byte at the given index
-  static function getElemAt(bytes b, int idx) : bytes {
-    return b[idx : idx + 1];
-  }
-
-  // set the byte at the given index
-  static function setElemAt(bytes b, int idx, bytes byteValue) : bytes {
-    return b[ : idx] + byteValue + b[idx + 1 : ];
-  }
-
-  /*
-  * VarInt (variable integer) is used to encode fields of variable length in a bitcoin transaction
-  * https://learnmeabitcoin.com/technical/varint
-  */
-  // read a VarInt field from the beginning of 'b'
-  static function readVarint(bytes b) : bytes {
-    int l = 0;
-    bytes ret = b'';
-    bytes header = b[0 : 1];
-
-    if (header == b'fd') {
-      l = this.fromLEUnsigned(b[1 : 3]);
-      ret = b[3 : 3 + l];
-    }
-    else if (header == b'fe') {
-      l = this.fromLEUnsigned(b[1 : 5]);
-      ret = b[5 : 5 + l];
-    }
-    else if (header == b'ff') {
-      l = this.fromLEUnsigned(b[1 : 9]);
-      ret = b[9 : 9 + l];
-    } else {
-      l = this.fromLEUnsigned(b[0 : 1]);
-      ret = b[1 : 1 + l];
+	// get the byte at the given index
+	static function getElemAt(bytes b, int idx): bytes {
+        return b[idx : idx + 1];
     }
 
-    return ret;
-  }
-
-  // number of bytes of the VarInt field read from the beginning of 'b'
-  static function readVarintLen(bytes b) : int {
-    int len = 0;
-    bytes header = b[0 : 1];
-
-    if (header == b'fd') {
-      len = 3 + this.fromLEUnsigned(b[1 : 3]);
-    }
-    else if (header == b'fe') {
-      len = 5 + this.fromLEUnsigned(b[1 : 5]);
-    }
-    else if (header == b'ff') {
-      len = 9 + this.fromLEUnsigned(b[1 : 9]);
-    } else {
-      len = 1 + this.fromLEUnsigned(b[0 : 1]);
+	// set the byte at the given index
+	static function setElemAt(bytes b, int idx, bytes byteValue): bytes {
+        return b[: idx] + byteValue + b[idx + 1 :];
     }
 
-    return len;
-  }
+	/*
+	 * VarInt (variable integer) is used to encode fields of variable length in a bitcoin transaction
+	 * https://learnmeabitcoin.com/technical/varint
+	 */
+	// read a VarInt field from the beginning of 'b'
+    static function readVarint(bytes b): bytes {
+		int l = 0;
+		bytes ret = b'';
+		bytes header = b[0:1];
 
-  // convert 'b' to a VarInt field, including the preceding length
-  static function writeVarint(bytes b) : bytes {
-    int n = len(b);
+		if (header == b'fd') {
+			l = this.fromLEUnsigned(b[1:3]);
+			ret = b[3:3+l];
+		} else if (header == b'fe') {
+			l = this.fromLEUnsigned(b[1:5]);
+			ret = b[5:5+l];
+		} else if (header == b'ff') {
+			l = this.fromLEUnsigned(b[1:9]);
+			ret = b[9:9+l];
+		} else {
+			l = this.fromLEUnsigned(b[0:1]);
+			ret = b[1:1+l];
+		}
 
-    bytes header = b'';
+		return ret;
+	}
 
-    if (n < 0xfd) {
-      header = this.toLEUnsigned(n, 1);
+	// number of bytes of the VarInt field read from the beginning of 'b'
+    static function readVarintLen(bytes b): int {
+        int len = 0;
+        bytes header = b[0:1];
+
+        if (header == b'fd') {
+            len = 3 + this.fromLEUnsigned(b[1:3]);
+        } else if (header == b'fe') {
+            len = 5 + this.fromLEUnsigned(b[1:5]);
+        } else if (header == b'ff') {
+            len = 9 + this.fromLEUnsigned(b[1:9]);
+        } else {
+            len = 1 + this.fromLEUnsigned(b[0:1]);
+        }
+
+        return len;
     }
-    else if (n < 0x10000) {
-      header = b'fd' + this.toLEUnsigned(n, 2);
-    }
-    else if (n < 0x100000000) {
-      header = b'fe' + this.toLEUnsigned(n, 4);
-    }
-    else if (n < 0x10000000000000000) {
-      header = b'ff' + this.toLEUnsigned(n, 8);
-    }
 
-    return header + b;
-  }
+	// convert 'b' to a VarInt field, including the preceding length
+    static function writeVarint(bytes b): bytes {
+		int n = len(b);
 
-  /*
-  * util functions to parse every filed of a sighash preimage
-  * Note: only to be used after preimage is validated
-  * spec is at https://github.com/bitcoin-sv/bitcoin-sv/blob/master/doc/abc/replay-protected-sighash.md
-  */
-  static function nVersion(SigHashPreimage preimage) : bytes {
-    return preimage[ : 4];
-  }
+		bytes header = b'';
 
-  static function hashPrevouts(SigHashPreimage preimage) : bytes {
-    return preimage[4 : 36];
-  }
+		if (n < 0xfd) {
+			header = this.toLEUnsigned(n, 1);
+		} else if (n < 0x10000) {
+			header = b'fd' + this.toLEUnsigned(n, 2);
+		} else if (n < 0x100000000) {
+			header = b'fe' + this.toLEUnsigned(n, 4);
+		} else if (n < 0x10000000000000000) {
+			header = b'ff' + this.toLEUnsigned(n, 8);
+		}
 
-  static function hashSequence(SigHashPreimage preimage) : bytes {
-    return preimage[36 : 68];
-  }
+		return header + b;
+	}
 
-  static function outpoint(SigHashPreimage preimage) : bytes {
-    return preimage[68 : 104];
-  }
 
-  // scriptCode is just scriptPubKey if there is no CODESEPARATOR in the latter
-  static function scriptCode(SigHashPreimage preimage) : bytes {
-    return Util.readVarint(preimage[104 : ]);
-  }
+	/*
+	 * util functions to parse every filed of a sighash preimage
+	 * Note: only to be used after preimage is validated
+	 * spec is at https://github.com/bitcoin-sv/bitcoin-sv/blob/master/doc/abc/replay-protected-sighash.md
+	 */
+	static function nVersion(SigHashPreimage preimage): bytes {
+		return preimage[:4];
+	}
 
-  static function valueRaw(SigHashPreimage preimage) : bytes {
-    int l = len(preimage);
-    return preimage[l - 52 : l - 44];
-  }
+	static function hashPrevouts(SigHashPreimage preimage): bytes {
+		return preimage[4:36];
+	}
 
-  static function value(SigHashPreimage preimage) : int {
-    return Util.fromLEUnsigned(Util.valueRaw(preimage));
-  }
+	static function hashSequence(SigHashPreimage preimage): bytes {
+		return preimage[36:68];
+	}
 
-  static function nSequenceRaw(SigHashPreimage preimage) : bytes {
-    int l = len(preimage);
-    return preimage[l - 44 : l - 40];
-  }
+	static function outpoint(SigHashPreimage preimage): bytes {
+		return preimage[68:104];
+	}
 
-  static function nSequence(SigHashPreimage preimage) : int {
-    return Util.fromLEUnsigned(Util.nSequenceRaw(preimage));
-  }
+	// scriptCode is just scriptPubKey if there is no CODESEPARATOR in the latter
+	static function scriptCode(SigHashPreimage preimage): bytes {
+		return Util.readVarint(preimage[104:]);
+	}
 
-  static function hashOutputs(SigHashPreimage preimage) : bytes {
-    int l = len(preimage);
-    return preimage[l - 40 : l - 8];
-  }
+	static function valueRaw(SigHashPreimage preimage): bytes {
+		int l = len(preimage);
+		return preimage[l - 52 : l - 44];
+	}
 
-  static function nLocktimeRaw(SigHashPreimage preimage) : bytes {
-    int l = len(preimage);
-    return preimage[l - 8 : l - 4];
-  }
+	static function value(SigHashPreimage preimage): int {
+		return Util.fromLEUnsigned(Util.valueRaw(preimage));
+	}
 
-  static function nLocktime(SigHashPreimage preimage) : int {
-    return Util.fromLEUnsigned(Util.nLocktimeRaw(preimage));
-  }
+	static function nSequenceRaw(SigHashPreimage preimage): bytes {
+		int l = len(preimage);
+		return preimage[l - 44 : l - 40];
+	}
 
-  static function sigHashType(SigHashPreimage preimage) : SigHashType {
-    int l = len(preimage);
-    return SigHashType(preimage[l - 4 : ]);
-  }
+	static function nSequence(SigHashPreimage preimage): int {
+		return Util.fromLEUnsigned(Util.nSequenceRaw(preimage));
+	}
 
-  // used only for testing
-  public function testPreimageParsing(SigHashPreimage preimage) {
-    require(Tx.checkPreimage(preimage));
-    SigHashPreimage preimage_ = SigHashPreimage(Util.nVersion(preimage) + Util.hashPrevouts(preimage) + Util.hashSequence(preimage) +
-      Util.outpoint(preimage) + Util.writeVarint(Util.scriptCode(preimage)) + Util.valueRaw(preimage) +
-      Util.nSequenceRaw(preimage) + Util.hashOutputs(preimage) + Util.nLocktimeRaw(preimage) + Util.sigHashType(preimage));
-    require(preimage == preimage_);
-  }
+	static function hashOutputs(SigHashPreimage preimage): bytes {
+		int l = len(preimage);
+		return preimage[l - 40 : l - 8];
+	}
 
-  // Writes variable amount of data respecting minimal push rules
-  static function writeVarMinimalPushdata(bytes b) : bytes {
-    int n = len(b);
-    bytes header = b'';
-    // Reference: https://github.com/moneybutton/bsv/blob/bsv-legacy/lib/script/script.js#L1083
-    if (n == 0) {
-    }
-    else if (n == 1) {
-      int rawInt = this.fromLEUnsigned(b);
-      if (rawInt >= 1 && rawInt <= 16) {
-        // If value is between 1 and 16 then use OP_1, OP_2...OP_16 to encode
-        header = this.toLEUnsigned(80 + rawInt, 1);
-      }
-      else if (n == 1 && rawInt == 0x81) {
-        // Use OP_1NEGATE
-        header = this.toLEUnsigned(79, 1);
-      }
-    }
-    else if (n < 76) {
-      // Use direct push
-      header = this.toLEUnsigned(n, 1) + b;
-    }
-    else if (n <= 255) {
-      header = b'4c' + this.toLEUnsigned(n, 1) + b;
-    }
-    else if (n <= 65535) {
-      header = b'4d' + this.toLEUnsigned(n, 2) + b;
-    } else {
-      header = b'4e' + this.toLEUnsigned(n, 4) + b;
-    }
-    return header;
-  }
+	static function nLocktimeRaw(SigHashPreimage preimage): bytes {
+		int l = len(preimage);
+		return preimage[l - 8 : l - 4];
+	}
+
+	static function nLocktime(SigHashPreimage preimage): int {
+		return Util.fromLEUnsigned(Util.nLocktimeRaw(preimage));
+	}
+
+	static function sigHashType(SigHashPreimage preimage): SigHashType {
+		int l = len(preimage);
+		return SigHashType(preimage[l - 4 :]);
+	}
+
+	// Writes variable amount of data respecting minimal push rules
+    static function writeVarMinimalPushdata(bytes b): bytes {
+		int n = len(b);
+		bytes header = b'';
+		// Reference: https://github.com/moneybutton/bsv/blob/bsv-legacy/lib/script/script.js#L1083
+		if (n == 0) {
+		} else if (n == 1) {
+			int rawInt = this.fromLEUnsigned(b);
+			if (rawInt >= 1 && rawInt <= 16) {
+				// If value is between 1 and 16 then use OP_1, OP_2...OP_16 to encode
+				header = this.toLEUnsigned(80 + rawInt, 1);
+			} else if (n == 1 && rawInt == 0x81) {
+				// Use OP_1NEGATE
+				header = this.toLEUnsigned(79, 1);
+			}
+		} else if (n < 76) {
+			// Use direct push
+			header = this.toLEUnsigned(n, 1) + b;
+		} else if (n <= 255) {
+			header = b'4c' + this.toLEUnsigned(n, 1) + b;
+		} else if (n <= 65535) {
+			header = b'4d' + this.toLEUnsigned(n, 2) + b;
+		} else {
+			header = b'4e' + this.toLEUnsigned(n, 4) + b;
+		}
+		return header;
+	}
 }

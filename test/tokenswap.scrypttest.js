@@ -1,15 +1,19 @@
 /* eslint-disable no-unused-expressions */
 const console = require( 'tracer' ).colorConsole()
 const { expect } = require( 'chai' )
-const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
+const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, num2bin, bin2num, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
 const {
   string2Hex, loadTokenContractDesc, compileContract,
   CONTRACT_BRFC_ID,
   BATON_BRFC_ID,
   TOKEN_BRFC_ID,
   SWAP_BRFC_ID,
-  num2bin, bin2num,
-  changTxForMSB
+  changTxForMSB,
+
+  genesisSchema,
+  batonSchema,
+  tokenSchema,
+  TokenValueLen
 
 } = require( '../helper' )
 
@@ -18,7 +22,7 @@ const BN = bsv.crypto.BN
 const Interpreter = bsv.Script.Interpreter
 
 const inputIndex = 0
-const inputSatoshis = 100000
+const inputSatoshis = 546
 const minFee = 546
 const dummyTxId1 = '1477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
 const dummyTxId2 = '2477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
@@ -52,7 +56,7 @@ describe( 'SWAP UTXO Token', () => {
   } )
 
   it( 'swap', () => {
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
     const issuerPrivKey = privateKey1
     const issuerAddress = privateKey1.toAddress()
@@ -70,9 +74,7 @@ describe( 'SWAP UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const tokenA = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractIdA),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -90,9 +92,7 @@ describe( 'SWAP UTXO Token', () => {
     // ]
 
     const tokenB = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractIdB),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -103,10 +103,10 @@ describe( 'SWAP UTXO Token', () => {
     console.log(tokenB.asmVars)
     const asmVars = tokenB.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
     console.log( tokenB.codePart.toASM() )
@@ -118,7 +118,6 @@ describe( 'SWAP UTXO Token', () => {
     const tokenB_Hash = bsv.crypto.Hash.sha256ripemd160( tokenB_CodeScript )
 
     const swap = new TokenSwap(
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       new Ripemd160( toHex( tokenA_Hash ) ),
       new Ripemd160( toHex( tokenB_Hash ) ),
       new Bytes(contractIdA),
@@ -142,7 +141,7 @@ describe( 'SWAP UTXO Token', () => {
     const tokenAuthCount = 0
     const tokenSupply = 1000
 
-    // 
+    //
     const witness = getWitnessByPubKey(witness0.pubKey)
     const { signature: rabinSigs, paddingBytes, order } = witness.swap({
       contractIdA: contractIdA,
@@ -152,39 +151,57 @@ describe( 'SWAP UTXO Token', () => {
       sellerPKH: toHex( issuerAddress.hashBuffer ), // Mock
       tokenB_Amount: tokenSupply - 300, // Mock
       changeTokenB_Amount: 300, // Mock
-      outpoint: reversedDummyTxId + num2bin(inputIndex, 4) //Mock
+      outpoint: reversedDummyTxId + num2bin(inputIndex, 4) // Mock
     })
 
     console.log(order)
 
-    const tokenA_Data = num2bin( tokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( order.tokenA_Amount, 32 )
+    const tokenA_Data = serializeState({
+      amount: num2bin(order.tokenA_Amount, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(toAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const tokenA_LockingScript = tokenA.codePart.toASM() + ' ' + tokenA_Data
     // console.log(tokenLockingScript)
     const tokenA_Script = bsv.Script.fromASM( tokenA_LockingScript )
 
-    // 
+    //
     tx0.addOutput( new bsv.Transaction.Output( {
       script: tokenA_Script,
       satoshis: holderSatoshi
     } ) )
 
-    const tokenB_Data = num2bin( tokenAuthCount, 1 ) + toHex( issuerAddress.hashBuffer ) + num2bin( order.tokenB_Amount, 32 )
+    const tokenB_Data = serializeState({
+      amount: num2bin(order.tokenB_Amount, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(issuerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const tokenB_LockingScript = tokenB.codePart.toASM() + ' ' + tokenB_Data
     // console.log(tokenLockingScript)
     const tokenB_Script = bsv.Script.fromASM( tokenB_LockingScript )
 
-    // 
+    //
     tx0.addOutput( new bsv.Transaction.Output( {
       script: tokenB_Script,
       satoshis: holderSatoshi
     } ) )
 
-    const changeToken_Data = num2bin( tokenAuthCount, 1 ) + toHex( changeAddress.hashBuffer ) + num2bin( order.changeTokenB_Amount, 32 )
+    const changeToken_Data = serializeState({
+      amount: num2bin(order.changeTokenB_Amount, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(changeAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const changeToken_LockingScript = tokenB.codePart.toASM() + ' ' + changeToken_Data
     // console.log(tokenLockingScript)
     const changeToken_Script = bsv.Script.fromASM( changeToken_LockingScript )
 
-    // 
+    //
     tx0.addOutput( new bsv.Transaction.Output( {
       script: changeToken_Script,
       satoshis: holderSatoshi
@@ -196,24 +213,6 @@ describe( 'SWAP UTXO Token', () => {
       satoshis: NOTIFY_SATOSHI
     } ) )
 
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
-
-    // console.log(tx1.toObject())
-
     const prevLockingScript = swap.lockingScript.toASM()
     const preimage = getPreimage( tx0, prevLockingScript, inputSatoshis, 0, sighashType )
     console.log( preimage.outpoint )
@@ -222,9 +221,9 @@ describe( 'SWAP UTXO Token', () => {
 
     const prevOutput = ''
 
-    // console.log( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenAmount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.satoshiAmount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), changeSatoshi, holderSatoshi, new Bytes(prevOutput), new Bytes(toHex( tokenCodeScript)), preimage, rabinSigs, new Bytes(paddingBytes) )
+    // console.log( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenAmount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.satoshiAmount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), new Bytes(toHex( tokenCodeScript)), preimage, rabinSigs, new Bytes(paddingBytes) )
 
-    const swapFn = swap.swap( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenA_Amount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.tokenB_Amount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( order.changeTokenB_Amount ), changeSatoshi, holderSatoshi, new Bytes(prevOutput), new Bytes(toHex( tokenA_CodeScript)), new Bytes(toHex( tokenB_CodeScript)), preimage, rabinSigs, new Bytes(paddingBytes) )
+    const swapFn = swap.swap( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenA_Amount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.tokenB_Amount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( order.changeTokenB_Amount ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), new Bytes(toHex( tokenA_CodeScript)), new Bytes(toHex( tokenB_CodeScript)), preimage, rabinSigs, new Bytes(paddingBytes) )
 
     const unlockingScript = swapFn.toScript()
 
@@ -238,11 +237,30 @@ describe( 'SWAP UTXO Token', () => {
 
     console.log( tx0 )
 
+
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
+
     const context = { tx: tx0, inputIndex, inputSatoshis }
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
     const result = swapFn.verify( context )
 
-    console.log( `SwapUnlockingScriptSize=${unlockingScript.toBuffer().length}` )
+    console.log( `SaleUnlockingScriptSize=${unlockingScript.toBuffer().length}` )
     console.log( 'Swap Size', swap.lockingScript.toHex().length / 2 )
     console.log( 'Token Size', tokenA.lockingScript.toHex().length / 2 )
 

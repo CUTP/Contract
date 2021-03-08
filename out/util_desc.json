@@ -1,0 +1,18 @@
+{
+    "version": 2,
+    "compilerVersion": "0.3.2+commit.eb5b607",
+    "contract": "Util",
+    "md5": "fcba10a49d46dfe3a4dbaddc4c4be26c",
+    "structs": [],
+    "alias": [],
+    "abi": [
+        {
+            "type": "constructor",
+            "params": []
+        }
+    ],
+    "file": "file:///Users/lilong/Works/CUTP/Contract/contracts/util.scrypt",
+    "asm": "",
+    "sources": [],
+    "sourceMap": []
+}

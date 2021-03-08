@@ -7,7 +7,7 @@ import { expect } from 'chai'
 
 import { witness0, witness1, witness2, getWitnessByPubKey } from './auth.mock'
 
-describe( 'Token', async () => {
+describe( 'Token Witness', async () => {
   beforeEach( async () => {
   } )
 

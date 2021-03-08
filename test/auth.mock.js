@@ -1,4 +1,4 @@
-// rabin auth API
+// rabin认证用API
 const console = require( 'tracer' ).colorConsole()
 
 const { bsv, num2bin } = require( 'scryptlib' )
@@ -86,7 +86,7 @@ class RabinAuth {
   }
 }
 
-// witness list
+// 见证人一览
 const witness0 = new RabinAuth(require( './rabin0.json' ))
 const witness1 = new RabinAuth(require( './rabin1.json' ))
 const witness2 = new RabinAuth(require( './rabin2.json' ))
@@ -96,6 +96,7 @@ map.set(witness0.pubKey, witness0)
 map.set(witness1.pubKey, witness1)
 map.set(witness2.pubKey, witness2)
 
+// 通过见证人公钥获取见证人
 const getWitnessByPubKey = (pubKey) => {
   return map.get(BigInt(pubKey))
 }

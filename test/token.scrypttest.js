@@ -1,14 +1,17 @@
 /* eslint-disable no-unused-expressions */
 const console = require( 'tracer' ).colorConsole()
 const { expect } = require( 'chai' )
-const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
+const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, num2bin, bin2num, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
 const {
-  string2Hex, loadTokenContractDesc, compileContract,
+  string2Hex, loadTokenContractDesc, compileContract, TokenValueLen,
   CONTRACT_BRFC_ID,
   BATON_BRFC_ID,
   TOKEN_BRFC_ID,
-  num2bin, bin2num,
-  changTxForMSB
+  changTxForMSB,
+
+  genesisSchema,
+  batonSchema,
+  tokenSchema
 
 } = require( '../helper' )
 
@@ -17,7 +20,7 @@ const BN = bsv.crypto.BN
 const Interpreter = bsv.Script.Interpreter
 
 const inputIndex = 0
-const inputSatoshis = 100000
+const inputSatoshis = 546
 const minFee = 546
 const dummyTxId = 'a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
 const reversedDummyTxId = '5884e5db9de218238671572340b207ee85b628074e7e467096c267266baf77a4'
@@ -51,7 +54,7 @@ describe( 'Controlled UTXO Token', () => {
   } )
 
   it( 'Transfer 1-2', () => {
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
     const ownerPrivKey = privateKey1
     const ownerAddress = privateKey1.toAddress()
@@ -68,9 +71,7 @@ describe( 'Controlled UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -78,19 +79,28 @@ describe( 'Controlled UTXO Token', () => {
         witness2.pubKey
       ],
       25 )
+
     console.log(token.asmVars)
     const asmVars = token.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
     const ownerSupply = 1000
-    // authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes) authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(ownerSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
+
     console.log( token )
 
     console.log( token.lockingScript.toASM() )
@@ -105,12 +115,20 @@ describe( 'Controlled UTXO Token', () => {
     // code part
     const lockingBodyScript = token.codePart.toASM()
 
-    // 
-    //  UTXO Token LockingScript
+    // 非标输出，0
+    // 创建 UTXO Token LockingScript
     // prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(32bytes) = 126bytes(7e)
     const newTokenAuthCount = 0
     const newTokenSupply = 700
-    const newTokenData = num2bin( newTokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( newTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const newTokenData = serializeState({
+      amount: num2bin(newTokenSupply, TokenValueLen),
+      authCount: newTokenAuthCount,
+      holderPKH: toHex(toAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
 
@@ -121,7 +139,15 @@ describe( 'Controlled UTXO Token', () => {
 
     const changeTokenAuthCount = 0
     const changeTokenSupply = 300
-    const changeTokenData = num2bin( changeTokenAuthCount, 1 ) + toHex( changeAddress.hashBuffer ) + num2bin( changeTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes) count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const changeTokenData = serializeState({
+      amount: num2bin(changeTokenSupply, TokenValueLen),
+      authCount: changeTokenAuthCount,
+      holderPKH: toHex(changeAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const changeTokenLockingScript = lockingBodyScript + ' ' + changeTokenData
     console.log(changeTokenLockingScript)
     const changeTokenScript = bsv.Script.fromASM( changeTokenLockingScript )
@@ -131,29 +157,10 @@ describe( 'Controlled UTXO Token', () => {
       satoshis: holderSatoshi
     } ) )
 
-    // Notify owner
     tx0.addOutput( new bsv.Transaction.Output( {
       script: bsv.Script.buildPublicKeyHashOut( toAddress ),
       satoshis: NOTIFY_SATOSHI
     } ) )
-
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
-
-    // console.log(tx1.toObject())
 
     const prevLockingScript = token.lockingScript.toASM()
 
@@ -176,10 +183,9 @@ describe( 'Controlled UTXO Token', () => {
       }
     }
 
-    // 
     const sig = signTx( tx0, ownerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
-    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), changeSatoshi, holderSatoshi, new Bytes(''), preimage, rabinSigs, paddingBytes )
+    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(''), preimage, rabinSigs, paddingBytes )
 
     const unlockingScript = transferFn.toScript()
 
@@ -192,6 +198,27 @@ describe( 'Controlled UTXO Token', () => {
     tx0.inputs[ 0 ].setScript( unlockingScript )
 
     console.log( tx0 )
+
+    // 计算所需的费用
+    // 所有输出的satoshis之和，所有输入的satoshi之和，判断交易的大小
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+    // 根据txSize计算所需的手续费
+    // feePerKb = 500
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    // 准备一个所需的费用输出
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
 
     const context = { tx: tx0, inputIndex, inputSatoshis }
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
@@ -206,7 +233,7 @@ describe( 'Controlled UTXO Token', () => {
   } )
 
   it( 'Transfer 1-1', () => {
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
     const ownerPrivKey = privateKey1
     const ownerAddress = privateKey1.toAddress()
@@ -223,9 +250,7 @@ describe( 'Controlled UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -233,18 +258,26 @@ describe( 'Controlled UTXO Token', () => {
         witness2.pubKey
       ],
       25 )
+
     console.log(token.asmVars)
     const asmVars = token.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
     const ownerSupply = 1000
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(ownerSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
     console.log( token )
 
@@ -260,12 +293,18 @@ describe( 'Controlled UTXO Token', () => {
     // code part
     const lockingBodyScript = token.codePart.toASM()
 
-    // 
-    //  UTXO Token LockingScript
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(32bytes) = 126bytes(7e)
+    // 非标输出，0
+    // 创建 UTXO Token LockingScript
     const newTokenAuthCount = 0
     const newTokenSupply = 1000
-    const newTokenData = num2bin( newTokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( newTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const newTokenData = serializeState({
+      amount: num2bin(newTokenSupply, TokenValueLen),
+      authCount: newTokenAuthCount,
+      holderPKH: toHex(toAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
 
@@ -277,29 +316,11 @@ describe( 'Controlled UTXO Token', () => {
     const changeTokenAuthCount = 0
     const changeTokenSupply = 0
 
-    // Notify owner
+    // 添加通知, 通知用户
     tx0.addOutput( new bsv.Transaction.Output( {
       script: bsv.Script.buildPublicKeyHashOut( toAddress ),
       satoshis: NOTIFY_SATOSHI
     } ) )
-
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
-
-    // console.log(tx1.toObject())
 
     const prevLockingScript = token.lockingScript.toASM()
 
@@ -323,12 +344,11 @@ describe( 'Controlled UTXO Token', () => {
       }
     }
 
-    // 
     const sig = signTx( tx0, ownerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
     const prevOutput = ''
 
-    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), changeSatoshi, holderSatoshi, new Bytes(prevOutput), preimage, rabinSigs, paddingBytes )
+    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), preimage, rabinSigs, paddingBytes )
 
     const unlockingScript = transferFn.toScript()
 
@@ -341,7 +361,26 @@ describe( 'Controlled UTXO Token', () => {
     tx0.inputs[ 0 ].setScript( unlockingScript )
 
     console.log( tx0 )
-
+    // 计算所需的费用
+    // 所有输出的satoshis之和，所有输入的satoshi之和，判断交易的大小
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+    // 根据txSize计算所需的手续费
+    // feePerKb = 500
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    // 准备一个所需的费用输出
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
     const context = { tx: tx0, inputIndex, inputSatoshis }
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
     const result = transferFn.verify( context )
@@ -355,7 +394,7 @@ describe( 'Controlled UTXO Token', () => {
   } )
 
   it( 'change satoshi is zero, 1-1', () => {
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
     const ownerPrivKey = privateKey1
     const ownerAddress = privateKey1.toAddress()
@@ -372,9 +411,7 @@ describe( 'Controlled UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -382,20 +419,27 @@ describe( 'Controlled UTXO Token', () => {
         witness2.pubKey
       ],
       25 )
+
     console.log(token.asmVars)
     const asmVars = token.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
     const ownerSupply = 1000
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(ownerSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
-    console.log( token )
 
     console.log( token.lockingScript.toASM() )
     console.log( token.lockingScript.toHex() )
@@ -409,12 +453,20 @@ describe( 'Controlled UTXO Token', () => {
     // code part
     const lockingBodyScript = token.codePart.toASM()
 
-    // 
-    //  UTXO Token LockingScript
+    // 非标输出，0
+    // 创建 UTXO Token LockingScript
     // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(32bytes) = 126bytes(7e)
     const newTokenAuthCount = 0
     const newTokenSupply = 1000
-    const newTokenData = num2bin( newTokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( newTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const newTokenData = serializeState({
+      amount: num2bin(newTokenSupply, TokenValueLen),
+      authCount: newTokenAuthCount,
+      holderPKH: toHex(toAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
 
@@ -426,29 +478,11 @@ describe( 'Controlled UTXO Token', () => {
     const changeTokenAuthCount = 0
     const changeTokenSupply = 0
 
-    // Notify owner
+    // 添加通知, 通知用户
     tx0.addOutput( new bsv.Transaction.Output( {
       script: bsv.Script.buildPublicKeyHashOut( toAddress ),
       satoshis: NOTIFY_SATOSHI
     } ) )
-
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 0
-    // tx0.addOutput( new bsv.Transaction.Output( {
-    //   script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-    //   satoshis: changeSatoshi
-    // } ) )
-
-    // console.log(tx1.toObject())
 
     const prevLockingScript = token.lockingScript.toASM()
 
@@ -470,11 +504,10 @@ describe( 'Controlled UTXO Token', () => {
       }
     }
 
-    // 
     const sig = signTx( tx0, ownerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
     const prevOutput = ''
 
-    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), changeSatoshi, holderSatoshi, new Bytes(prevOutput), preimage, rabinSigs, paddingBytes )
+    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), preimage, rabinSigs, paddingBytes )
 
     const unlockingScript = transferFn.toScript()
 
@@ -487,7 +520,26 @@ describe( 'Controlled UTXO Token', () => {
     tx0.inputs[ 0 ].setScript( unlockingScript )
 
     console.log( tx0 )
-
+    // 计算所需的费用
+    // 所有输出的satoshis之和，所有输入的satoshi之和，判断交易的大小
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+    // 根据txSize计算所需的手续费
+    // feePerKb = 500
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    // 准备一个所需的费用输出
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
     const context = { tx: tx0, inputIndex, inputSatoshis }
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
     const result = transferFn.verify( context )
@@ -500,8 +552,8 @@ describe( 'Controlled UTXO Token', () => {
     expect( result.success, result.error ).to.be.true
   } )
 
-  it( 'Transfer 1-2 with preOutput', () => {
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+  it( 'Transfer 1 to 2 With preOutput', () => {
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
     const ownerPrivKey = privateKey1
     const ownerAddress = privateKey1.toAddress()
@@ -518,9 +570,7 @@ describe( 'Controlled UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -528,19 +578,28 @@ describe( 'Controlled UTXO Token', () => {
         witness2.pubKey
       ],
       25 )
+
     console.log(token.asmVars)
     const asmVars = token.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
     const ownerSupply = 1000
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(ownerSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
+
     console.log( token )
 
     console.log( token.lockingScript.toASM() )
@@ -555,7 +614,7 @@ describe( 'Controlled UTXO Token', () => {
     // code part
     const lockingBodyScript = token.codePart.toASM()
 
-    // 
+    // 前输出，在所有的Token输出之前还有的输出
     const prevScript = bsv.Script.buildPublicKeyHashOut( ownerAddress )
     const prevSatoshi = 5000
     tx0.addOutput( new bsv.Transaction.Output( {
@@ -563,16 +622,24 @@ describe( 'Controlled UTXO Token', () => {
       satoshis: prevSatoshi
     } ) )
 
-    // 
+    // 获取第一个输出的字节数组
     const prevOutput = tx0.outputs[0].toBufferWriter().toBuffer().toString('hex')
     console.log(prevOutput)
 
-    // 
-    //  UTXO Token LockingScript
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(32bytes) = 126bytes(7e)
+    // 非标输出，0
+    // 创建 UTXO Token LockingScript
+
     const newTokenAuthCount = 0
     const newTokenSupply = 700
-    const newTokenData = num2bin( newTokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( newTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const newTokenData = serializeState({
+      amount: num2bin(newTokenSupply, TokenValueLen),
+      authCount: newTokenAuthCount,
+      holderPKH: toHex(toAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
 
@@ -583,7 +650,15 @@ describe( 'Controlled UTXO Token', () => {
 
     const changeTokenAuthCount = 0
     const changeTokenSupply = 300
-    const changeTokenData = num2bin( changeTokenAuthCount, 1 ) + toHex( changeAddress.hashBuffer ) + num2bin( changeTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const changeTokenData = serializeState({
+      amount: num2bin(changeTokenSupply, TokenValueLen),
+      authCount: changeTokenAuthCount,
+      holderPKH: toHex(changeAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const changeTokenLockingScript = lockingBodyScript + ' ' + changeTokenData
     console.log(changeTokenLockingScript)
     const changeTokenScript = bsv.Script.fromASM( changeTokenLockingScript )
@@ -593,29 +668,11 @@ describe( 'Controlled UTXO Token', () => {
       satoshis: holderSatoshi
     } ) )
 
-    // Notify owner
+    // 添加通知, 通知用户
     tx0.addOutput( new bsv.Transaction.Output( {
       script: bsv.Script.buildPublicKeyHashOut( toAddress ),
       satoshis: NOTIFY_SATOSHI
     } ) )
-
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
-
-    // console.log(tx1.toObject())
 
     const prevLockingScript = token.lockingScript.toASM()
 
@@ -637,10 +694,10 @@ describe( 'Controlled UTXO Token', () => {
       }
     }
 
-    // 
+    // 构造发行商签名，只有签名同创世交易的发行商公钥一致才可以首次发行
     const sig = signTx( tx0, ownerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
-    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), changeSatoshi, holderSatoshi, new Bytes(prevOutput), preimage, rabinSigs, paddingBytes )
+    const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), preimage, rabinSigs, paddingBytes )
 
     const unlockingScript = transferFn.toScript()
 
@@ -653,7 +710,26 @@ describe( 'Controlled UTXO Token', () => {
     tx0.inputs[ 0 ].setScript( unlockingScript )
 
     console.log( tx0 )
-
+    // 计算所需的费用
+    // 所有输出的satoshis之和，所有输入的satoshi之和，判断交易的大小
+    console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+    // 根据txSize计算所需的手续费
+    // feePerKb = 500
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    // 准备一个所需的费用输出
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 1,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
     const context = { tx: tx0, inputIndex, inputSatoshis }
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
     const result = transferFn.verify( context )
@@ -667,7 +743,7 @@ describe( 'Controlled UTXO Token', () => {
   } )
 
   it( 'Transfer n-2', () => {
-    const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
     const ownerPrivKey = privateKey1
     const ownerAddress = privateKey1.toAddress()
@@ -682,9 +758,7 @@ describe( 'Controlled UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -692,20 +766,27 @@ describe( 'Controlled UTXO Token', () => {
         witness2.pubKey
       ],
       25 )
+
     console.log(token.asmVars)
     const asmVars = token.asmVars
     const witnessList = [
-      bin2num(asmVars['witness[0]']),
-      bin2num(asmVars['witness[1]']),
-      bin2num(asmVars['witness[2]']),
-      bin2num(asmVars['witness[3]'])
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
     ]
 
     const ownerSupply = 1000
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(ownerSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
-    console.log( token )
 
     // console.log( token.lockingScript.toASM() )
     // console.log( token.lockingScript.toHex() )
@@ -738,14 +819,21 @@ describe( 'Controlled UTXO Token', () => {
     // make a copy since it will be mutated
     // make a copy since it will be mutated
     // const tx0 = new bsv.Transaction( )
-    const tx0 = bsv.Transaction.shallowCopy( tx )
+    const tx0 = new bsv.Transaction()
 
     const indexBase = tx0.inputs.length
     console.log(indexBase)
 
     tokenUtxos.forEach( ( utxo, index ) => {
       console.log(utxo)
-      const data = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+      // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+      const data = serializeState({
+        amount: num2bin(ownerSupply, TokenValueLen),
+        authCount: 0,
+        holderPKH: toHex(ownerAddress.hashBuffer),
+        brfc: TOKEN_BRFC_ID
+      }, STATE_LEN_2BYTES, tokenSchema)
 
       const lockingScript = lockingBodyScript + ' ' + data
       tx0.addInput(new bsv.Transaction.Input({
@@ -753,16 +841,24 @@ describe( 'Controlled UTXO Token', () => {
         outputIndex: utxo.outputIndex,
         script: ''
       }), bsv.Script.fromASM(lockingScript), holderSatoshi)
-      // 
+      // 设置一个Dummy解锁Buffer
       tx0.inputs[ indexBase + index ].setScript( Buffer.alloc(3000) )
     })
 
-    // 
-    //  UTXO Token LockingScript
+    // 非标输出，0
+    // 创建 UTXO Token LockingScript
     // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(32bytes) = 126bytes(7e)
     const newTokenAuthCount = 0
     const newTokenSupply = tokenUtxos.length * ownerSupply - 300
-    const newTokenData = num2bin( newTokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( newTokenSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+    const newTokenData = serializeState({
+      amount: num2bin(newTokenSupply, TokenValueLen),
+      authCount: newTokenAuthCount,
+      holderPKH: toHex(toAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
 
@@ -773,7 +869,14 @@ describe( 'Controlled UTXO Token', () => {
 
     const changeTokenAuthCount = 0
     const changeTokenSupply = 300
-    const changeTokenData = num2bin( changeTokenAuthCount, 1 ) + toHex( changeAddress.hashBuffer ) + num2bin( changeTokenSupply, 32 )
+
+    const changeTokenData = serializeState({
+      amount: num2bin(changeTokenSupply, TokenValueLen),
+      authCount: changeTokenAuthCount,
+      holderPKH: toHex(changeAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     const changeTokenLockingScript = lockingBodyScript + ' ' + changeTokenData
     // console.log(changeTokenLockingScript)
     const changeTokenScript = bsv.Script.fromASM( changeTokenLockingScript )
@@ -783,32 +886,21 @@ describe( 'Controlled UTXO Token', () => {
       satoshis: holderSatoshi
     } ) )
 
-    // Notify owner
+    // 添加通知, 通知用户
     tx0.addOutput( new bsv.Transaction.Output( {
       script: bsv.Script.buildPublicKeyHashOut( toAddress ),
       satoshis: NOTIFY_SATOSHI
     } ) )
 
-    // Notify witness
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
-
-    const changeSatoshi = 1000
-    tx0.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( changeAddress ),
-      satoshis: changeSatoshi
-    } ) )
-
-    // console.log(tx1.toObject())
-
     tokenUtxos.forEach( ( utxo, index ) => {
-      const data = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+      // codePart + OP_RETURN tokenAmount(32bytes) count(1byte)  ownerPkh(20bytes) TOKEN_BRFC_ID
+      const data = serializeState({
+        amount: num2bin(ownerSupply, TokenValueLen),
+        authCount: 0,
+        holderPKH: toHex(ownerAddress.hashBuffer),
+        brfc: TOKEN_BRFC_ID
+      }, STATE_LEN_2BYTES, tokenSchema)
+
       const prevLockingScript = lockingBodyScript + ' ' + data
 
       console.log(holderSatoshi, indexBase + index, sighashType)
@@ -831,10 +923,10 @@ describe( 'Controlled UTXO Token', () => {
         }
       }
 
-      // 
+      // 构造发行商签名，只有签名同创世交易的发行商公钥一致才可以首次发行
       const sig = signTx( tx0, ownerPrivKey, prevLockingScript, holderSatoshi, indexBase + index, sighashType )
 
-      const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), changeSatoshi, holderSatoshi, new Bytes(''), preimage, rabinSigs, paddingBytes )
+      const transferFn = token.transfer( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( newTokenSupply ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), new Int( changeTokenSupply ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(''), preimage, rabinSigs, paddingBytes )
 
       const unlockingScript = transferFn.toScript()
 
@@ -856,5 +948,21 @@ describe( 'Controlled UTXO Token', () => {
     })
     // console.log( 'Transaction Size', tx0.serialize().length / 2 )
     console.log( tx0 )
+
+    tx0.feePerKb(500)
+    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    const needFee = tx0._estimateFee() - tx0.getFee()
+    console.log('Tx Fee', needFee)
+    // 准备一个所需的费用输出
+    tx0.addInput(
+      new bsv.Transaction.Input({
+        prevTxId: dummyTxId,
+        outputIndex: 5,
+        script: ''
+      }),
+      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      needFee
+    )
+    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
   } )
 } )

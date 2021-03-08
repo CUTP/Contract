@@ -2,7 +2,6 @@ const path = require( 'path' )
 
 const {
   bsv,
-  compile,
   getPreimage,
   toHex
 } = require( 'scryptlib' )
@@ -35,28 +34,40 @@ function unlockP2PKHInput ( privateKey, tx, inputIndex, sigtype ) {
     sig.sigtype
   ) )
 }
-
-function compileContract ( fileName ) {
-  const filePath = path.join( __dirname, 'contracts', fileName )
-  console.log( `Compiling contract ${filePath} ...` )
-
-  const result = compile(
-    { path: filePath },
-    { desc: true, outputDir: path.join( __dirname, 'autoGen' ) }
-  )
-
-  if ( result.errors.length > 0 ) {
-    console.log( `Contract ${filePath} compiling failed with errors:` )
-    console.log( result.errors )
-    throw result.errors
-  }
-  console.log( `Compiling Finished ${filePath} ...` )
-
-  return result
+/**
+ * 计算目前tx所需要的充值费用
+ * @param {*} tx
+ */
+function calcChargeFee (tx, feePerKb = 500) {
+  // 计算所需的费用
+  // 所有输出的satoshis之和，所有输入的satoshi之和，判断交易的大小
+  // console.log( 'Pre-Transaction Size', tx0._estimateFee() )
+  // 根据txSize计算所需的手续费
+  // feePerKb = 500
+  tx.feePerKb(feePerKb)
+  // 通过size计算出的费用 - (所有输入-所有输出) + 一个P2PKH交易的大小
+  return tx._estimateFee() - tx._getUnspentValue() + Math.ceil(149 / 1000 * (feePerKb))
+}
+/**
+ * Charge satoshis to Contract Tx
+ * @param {*} p2pkhUtxos
+ * @param {*} chargeAmount
+ */
+function buildChargeTx ( p2pkhUtxos, privKeys, chargeAddressStr, chargeAmount, changeAddressStr, feePerKb = 500) {
+  const tx = new bsv.Transaction()
+  tx.from(p2pkhUtxos)
+  tx.feePerKb(feePerKb)
+  tx.addOutput( new bsv.Transaction.Output( {
+    script: bsv.Script.buildPublicKeyHashOut( chargeAddressStr ),
+    satoshis: chargeAmount
+  } ) )
+  tx.change(changeAddressStr)
+  tx.sign(privKeys)
+  return tx
 }
 
 function loadTokenContractDesc ( fileName ) {
-  const contract = require(`./autoGen/${fileName}`)
+  const contract = require(`./out/${fileName}`)
   return contract
 }
 
@@ -82,86 +93,51 @@ function hex2String ( hex ) {
 const sleep = ( ms ) => new Promise( ( resolve, _ ) => setTimeout( () => resolve(), ms ) )
 
 const UnlockingScriptSize = {
-  Initiate: 106,
-  Issue: 2287,
-  Transfer: 5583,
-  Burn: 5115,
-  Sale: 7974, 
-  Swap: 13078
+  Burn: 4700
 }
 
-const CONTRACT_BRFC_ID = 'b02de8c88330'
-const BATON_BRFC_ID = '95c087f2c67c'
-const TOKEN_BRFC_ID = 'd0d555f9d6d4'
-const SALE_BRFC_ID = '4c3b48a0651e'
-const SWAP_BRFC_ID = '520d125f21e7'
+const CONTRACT_BRFC_ID = '99b1e6a59ced'
+const BATON_BRFC_ID = 'cc854318d187'
+const TOKEN_BRFC_ID = '460a852aa0ea'
+const SALE_BRFC_ID = 'accb4bd81142'
+const SWAP_BRFC_ID = '1400fef15095'
 
 const NFT_CONTRACT_BRFC_ID = 'dacdd94bfb3e'
 const NFT_BATON_BRFC_ID = '5a3a78b9b744'
+const NFT_FACTORY_BRFC_ID = 'd8663d0d0ef4'
 const NFT_TOKEN_BRFC_ID = 'e22200618383'
+const NFT_CERT_BRFC_ID = 'c7f0eab6f355'
 const NFT_SALE_BRFC_ID = 'a2d7f217c2c0'
 const NFT_SWAP_BRFC_ID = '35a30d90364c'
+
+const genesisSchema = {
+  name: 'string',
+  symbol: 'string',
+  issuer: 'string',
+  domain: 'string',
+  rule: 'number',
+  decimals: 'number',
+  brfc: 'bytes'
+}
+
+const batonSchema = {
+  supply: 'bytes',
+  issuerPKH: 'bytes',
+  brfc: 'bytes'
+}
+
+const tokenSchema = {
+  amount: 'bytes', // fixed 32bytes number
+  authCount: 'number',
+  holderPKH: 'bytes',
+  brfc: 'bytes'
+}
 
 // Notify Satoshi amount
 const NOTIFY_SATOSHI = 546
 
 // Token Value的字节数，32字节，256bit, uint256
 const TokenValueLen = 32
-
-// Converts a number into a sign-magnitude representation of certain size as a string
-// Throws if the number cannot be accommodated
-// Often used to append numbers to OP_RETURN, which are read in contracts
-// Support Bigint
-function num2bin (n, dataLen) {
-  const num = new BN(n)
-  if (num.eqn(0)) {
-    return '00'.repeat(dataLen)
-  }
-  const s = num.toSM({ endian: 'little' }).toString('hex')
-
-  const byteLen_ = s.length / 2
-  if (byteLen_ > dataLen) {
-    throw new Error(`${n} cannot fit in ${dataLen} byte[s]`)
-  }
-  if (byteLen_ === dataLen) {
-    return s
-  }
-
-  const paddingLen = dataLen - byteLen_
-  const lastByte = s.substring(s.length - 2)
-  const rest = s.substring(0, s.length - 2)
-  let m = parseInt(lastByte, 16)
-  if (num.isNeg) {
-    // reset sign bit
-    m &= 0x7F
-  }
-  let mHex = m.toString(16)
-  if (mHex.length < 2) {
-    mHex = '0' + mHex
-  }
-
-  const padding = n > 0 ? '00'.repeat(paddingLen) : '00'.repeat(paddingLen - 1) + '80'
-  return rest + mHex + padding
-}
-
-// Support Bigint
-function bin2num (s) {
-  const hex = s.toString('hex')
-  const lastByte = hex.substring(hex.length - 2)
-  const rest = hex.substring(0, hex.length - 2)
-  const m = parseInt(lastByte, 16)
-  const n = m & 0x7F
-  let nHex = n.toString(16)
-  if (nHex.length < 2) {
-    nHex = '0' + nHex
-  }
-  // Support negative number
-  let bn = BN.fromHex(rest + nHex, { endian: 'little' } )
-  if (m >> 7) {
-    bn = bn.neg()
-  }
-  return BigInt(bn)
-}
 
 function changTxForMSB (tx_, inputLockingScriptASM, inputAmount, inputIndex, sighashType) {
   const MSB_THRESHOLD = 0x7e
@@ -185,11 +161,13 @@ function changTxForMSB (tx_, inputLockingScriptASM, inputAmount, inputIndex, sig
 module.exports = {
   reverseEndian,
   unlockP2PKHInput,
-  compileContract,
   outputs2Hex,
   string2Hex,
   hex2String,
   sleep,
+
+  calcChargeFee,
+  buildChargeTx,
 
   loadTokenContractDesc,
 
@@ -201,16 +179,20 @@ module.exports = {
 
   NFT_CONTRACT_BRFC_ID,
   NFT_BATON_BRFC_ID,
+  NFT_FACTORY_BRFC_ID,
   NFT_TOKEN_BRFC_ID,
+  NFT_CERT_BRFC_ID,
   NFT_SALE_BRFC_ID,
   NFT_SWAP_BRFC_ID,
 
   NOTIFY_SATOSHI,
   TokenValueLen,
 
-  bin2num,
-  num2bin,
   changTxForMSB,
 
-  UnlockingScriptSize
+  UnlockingScriptSize,
+
+  genesisSchema,
+  batonSchema,
+  tokenSchema
 }

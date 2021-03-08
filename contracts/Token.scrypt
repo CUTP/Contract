@@ -2,126 +2,113 @@ import "util.scrypt";
 import "rabin.scrypt";
 
 /**
-* A Controllable token protocol based on UTXO model
+* A Controlled token protocol based on UTXO model
 */
 contract Token {
-  bytes brfcId;
   bytes contractId;
-  Ripemd160 witnessPKH;
-  int[4] witness;
+  int[4] witnesses;
   int maxAuthCount;
 
   function buildTokenOutput(bytes lockingScriptBody,
+    int amount,
     int authCount,
-    Ripemd160 ownerPKH,
-    int supply,
-    int outValue) : bytes {
-      bytes output = b'';
-      if(supply != 0) {
-        // write Token UTXO locking script
-        // authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 53bytes(0x35)
-        bytes data = num2bin(authCount, 1) + ownerPKH + num2bin(supply, Util.TokenValueLen);
-        bytes lockingScript = lockingScriptBody + data;
-        output = Util.buildOutput(lockingScript, outValue);
-      }
-      return output;
+    Ripemd160 holderPKH,
+    int outValue
+    ) : bytes {
+    //OPRETUNR + '20' + amount(32bytes) + '01' + authCount(1byte) + '14' + holderPKH(20bytes) + '06' + brfc(6bytes) + '02' + stateLen(2bytes)
+
+    // write Token UTXO locking script
+    bytes scriptCode = lockingScriptBody + num2bin(amount, Util.TokenValueLen) + b'01' + num2bin(authCount, 1) + b'14' + holderPKH + Util.TOKEN_BRFC_ID + b'023f00';
+
+    return Util.buildOutput(scriptCode, outValue);
   }
 
   public function transfer(
-    Sig senderSig, 
-    PubKey senderPubKey, 
-    Ripemd160 receiverPKH, 
-    int receiverTokenAmount, 
-    Ripemd160 changePKH, 
-    int changeTokenAmount, 
-    int changeSatoshi, 
-    int outValue, 
-    bytes prevOutput, 
-    SigHashPreimage txPreimage, 
+    Sig senderSig,
+    PubKey senderPubKey,
+    Ripemd160 receiverPKH,
+    int receiverTokenAmount,
+    Ripemd160 changePKH,
+    int changeTokenAmount,
+    int notifySatoshi,
+    int outValue,
+    bytes prevOutput,
+    SigHashPreimage txPreimage,
     int[4] rabinSig, bytes[4] rabinPadding) {
 
+    SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
     // this ensures the preimage is for the current tx
-    require(Tx.checkPreimage(txPreimage));
+    require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
-    // read UTXO Token locking script:
-    // authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 53bytes(0x35)
-    bytes lockingScript = Util.scriptCode(txPreimage);
-    int scriptLen = len(lockingScript);
+    bytes scriptCode = Util.scriptCode(txPreimage);
+    int scriptLen = len(scriptCode);
 
-    int tokenAmountStart = scriptLen - Util.TokenValueLen;
-    int ownerPkhStart = tokenAmountStart - 20;
-    int countStart = ownerPkhStart - 1;
+    //OPRETUNR + '20' + amount(32bytes) + '01' + authCount(1byte) + '14' + holderPKH(20bytes) + '06' + brfc(6bytes) + '02' + stateLen(2bytes)
 
-    bytes ownerPkhBytes = lockingScript[ownerPkhStart : tokenAmountStart];
-    Ripemd160 ownerPKH = Ripemd160(ownerPkhBytes);
+    int stateLenStart = scriptLen - 3; //'02' + stateLen(2bytes)
+    int brfcStart = stateLenStart - 7; //'06' + brfc(6bytes)
+    require(scriptCode[brfcStart : stateLenStart] == Util.TOKEN_BRFC_ID); //b'06' + TOKEN_BRFC_ID
+
+    // PublickKeyHash's len is 20bytes
+    int pkhStart = brfcStart - 21; // '14' + holderPKH(20bytes)
+    Ripemd160 holderPKH = Ripemd160(scriptCode[pkhStart + 1 : brfcStart]);
 
     // authorize
-    require(hash160(senderPubKey) == ownerPKH);
+    require(hash160(senderPubKey) == holderPKH);
     require(checkSig(senderSig, senderPubKey));
-    require(ownerPKH != receiverPKH);
 
-    //back trace count, zero is signed, other is not.
-    int authCount = unpack(lockingScript[countStart : ownerPkhStart]);
-    
     //outpoint (32-byte hash + 4-byte little endian)
     bytes prevOutpoint = Util.outpoint(txPreimage);
 
+    int authCountStart = pkhStart - 1; //authCount(1byte)
+
+    //back trace count, zero is signed, other is not.
+    int authCount = unpack(scriptCode[authCountStart : pkhStart]);
+
     // verify rabin signature
-    if( true == Rabin.multiSig(prevOutpoint, rabinSig, rabinPadding, this.witness)) {
+    if (true == Rabin.multiSig(prevOutpoint, rabinSig, rabinPadding, this.witnesses)) {
       authCount = 0;
     } else {
       authCount = authCount + 1;
     }
     require(authCount <= this.maxAuthCount && authCount <= 255);
 
-    bytes lockingScriptBody = lockingScript[ : countStart];
+    int tokenAmountStart = authCountStart - Util.TokenValueLen - 1; //'14'
+    bytes lockingScriptBody = scriptCode[ : tokenAmountStart];
 
     // Token UTXO
-    bytes output0 = this.buildTokenOutput(lockingScriptBody, authCount, receiverPKH, receiverTokenAmount, outValue);
+    bytes output0 = this.buildTokenOutput(lockingScriptBody, receiverTokenAmount, authCount, receiverPKH, outValue);
 
-    bytes output1 = this.buildTokenOutput(lockingScriptBody, authCount, changePKH, changeTokenAmount, outValue);
+    bytes output1 =(changeTokenAmount != 0) ? this.buildTokenOutput(lockingScriptBody, changeTokenAmount, authCount, changePKH, outValue) : b'';
 
     // notify receiver output
-    bytes output2 = Util.buildNotificationOutput(receiverPKH);
+    bytes output2 = Util.buildPublicKeyHashOutput(notifySatoshi, receiverPKH);
 
-    // notify witness output
-    bytes output3 = Util.buildNotificationOutput(this.witnessPKH);
-
-    // the change output
-    bytes output4 = Util.buildPublicKeyHashOutput(changeSatoshi, changePKH);
-
-    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2 + output3 + output4);
+    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2);
     require(hashOutputs == Util.hashOutputs(txPreimage));
   }
 
-  // burn a baton or token utxo back to normal bitcoins
-  public function burn(Sig ownerSig, PubKey ownerPK, Ripemd160 changePKH, int changeSatoshi, SigHashPreimage txPreimage) {
+  // burn token utxo back to p2pkh
+  public function burn(Sig ownerSig, PubKey ownerPK, SigHashPreimage txPreimage) {
     // this ensures the preimage is for the current tx
     require(Tx.checkPreimage(txPreimage));
 
-    // read previous locking script:
-    // count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    bytes lockingScript = Util.scriptCode(txPreimage);
-    int scriptLen = len(lockingScript);
+    bytes scriptCode = Util.scriptCode(txPreimage);
+    int scriptLen = len(scriptCode);
 
-    int tokenAmountStart = scriptLen - Util.TokenValueLen;
-    int ownerPkhStart = tokenAmountStart - 20;
-    bytes ownerPkhBytes = lockingScript[ownerPkhStart : tokenAmountStart];
-    Ripemd160 ownerPKH = Ripemd160(ownerPkhBytes);
+    //OPRETUNR + '20' + amount(32bytes) + '01' + authCount(1byte) + '14' + holderPKH(20bytes) + '06' + brfc(6bytes) + '02' + stateLen(2bytes)
+
+    int stateLenStart = scriptLen - 3; //'02' + stateLen(2bytes)
+    int brfcStart = stateLenStart - 7; //'06' + brfc(6bytes)
+    require(scriptCode[brfcStart : stateLenStart] == Util.TOKEN_BRFC_ID);
+
+    // PublickKeyHash's len is 20bytes
+    int pkhStart = brfcStart - 21; // '14' + holderPKH(20bytes)
+    Ripemd160 holderPKH = Ripemd160(scriptCode[pkhStart + 1 : brfcStart]);
 
     // authorize
-    require(hash160(ownerPK) == ownerPKH);
+    require(hash160(ownerPK) == holderPKH);
     require(checkSig(ownerSig, ownerPK));
-
-    // notify witness output
-    bytes output0 = Util.buildNotificationOutput(this.witnessPKH);
-
-    // send to a P2PKH script
-    bytes changeScript = Util.buildPublicKeyHashScript(changePKH);
-    bytes output1 = num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
-
-    Sha256 hashOutputs = hash256(output0 + output1);
-    require(hashOutputs == Util.hashOutputs(txPreimage));
   }
 }
 

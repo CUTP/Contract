@@ -1,14 +1,17 @@
 /* eslint-disable no-unused-expressions */
 const console = require( 'tracer' ).colorConsole()
 const { expect } = require( 'chai' )
-const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, sighashType2Hex, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
+const { bsv, buildContractClass, signTx, toHex, getPreimage, Sig, Int, PubKey, Ripemd160, SigHashPreimage, num2bin, bin2num, Bytes, serializeState, STATE_LEN_2BYTES, deserializeState } = require( 'scryptlib' )
 const {
-  string2Hex, loadTokenContractDesc, compileContract,
+  string2Hex, loadTokenContractDesc, compileContract, TokenValueLen,
   CONTRACT_BRFC_ID,
   BATON_BRFC_ID,
   TOKEN_BRFC_ID,
-  num2bin, bin2num,
-  changTxForMSB
+  changTxForMSB,
+
+  genesisSchema,
+  batonSchema,
+  tokenSchema
 
 } = require( '../helper' )
 
@@ -34,7 +37,7 @@ const outputAmount = 222222
 
 import { witness0, witness1, witness2 } from './auth.mock'
 
-describe( 'Burn', () => {
+describe( 'Controlled UTXO Token', () => {
   let Genesis, Baton, Token, privateKey1, publicKey1, privateKey2, publicKey2
 
   before( () => {
@@ -68,9 +71,7 @@ describe( 'Burn', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(TOKEN_BRFC_ID),
       new Bytes(contractId),
-      new Ripemd160( toHex( witnessAddress.hashBuffer ) ),
       [
         BigInt(0),
         witness0.pubKey,
@@ -78,11 +79,26 @@ describe( 'Burn', () => {
         witness2.pubKey
       ],
       25 )
+
     console.log(token.asmVars)
+    const asmVars = token.asmVars
+    const witnessList = [
+      bin2num(asmVars['witnesses[0]']),
+      bin2num(asmVars['witnesses[1]']),
+      bin2num(asmVars['witnesses[2]']),
+      bin2num(asmVars['witnesses[3]'])
+    ]
 
     const ownerSupply = 1000
-    // codePart + OP_RETURN + TOKEN_BRFC_ID(6bytes) + contractId(32bytes) + count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
-    const tokenData = num2bin( 0, 1 ) + toHex( ownerAddress.hashBuffer ) + num2bin( ownerSupply, 32 )
+
+    // codePart + OP_RETURN tokenAmount(32bytes)+authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
+    const tokenData = serializeState({
+      amount: num2bin(ownerSupply, TokenValueLen),
+      authCount: 0,
+      holderPKH: toHex(ownerAddress.hashBuffer),
+      brfc: TOKEN_BRFC_ID
+    }, STATE_LEN_2BYTES, tokenSchema)
+
     token.setDataPart(tokenData)
     console.log( token )
 
@@ -94,16 +110,6 @@ describe( 'Burn', () => {
 
     // make a copy since it will be mutated
     const tx1 = bsv.Transaction.shallowCopy( tx )
-
-    // Notify witness
-    tx1.addOutput( new bsv.Transaction.Output( {
-      script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
-      satoshis: NOTIFY_SATOSHI
-    } ) )
-
-    // change
-    // tx1.change( changeAddress )
-    // const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis
 
     const changeSatoshi = 1000
     tx1.addOutput( new bsv.Transaction.Output( {
@@ -118,10 +124,9 @@ describe( 'Burn', () => {
     const preimage = getPreimage( tx1, prevLockingScript, inputSatoshis, 0, sighashType )
     console.log( preimage.outpoint )
 
-    // 
     const sig = signTx( tx1, ownerPrivKey, prevLockingScript, inputSatoshis, 0, sighashType )
 
-    const burnFn = token.burn( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), changeSatoshi, new SigHashPreimage( toHex( preimage ) ) )
+    const burnFn = token.burn( new Sig( toHex( sig ) ), new PubKey( toHex( ownerPubKey ) ), new SigHashPreimage( toHex( preimage ) ) )
 
     const unlockingScript = burnFn.toScript()
 

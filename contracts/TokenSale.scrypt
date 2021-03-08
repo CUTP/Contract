@@ -4,23 +4,22 @@ import "rabin.scrypt";
 contract TokenSale {
   bytes brfcId;
   bytes contractId;
-  Ripemd160 witnessPKH;
   Ripemd160 tokenCodeScriptHash;
   Ripemd160 issuerPKH;
   int issuer;
 
   function buildTokenOutput(bytes lockingScriptBody,
+    int amount,
     int authCount,
-    Ripemd160 ownerPKH,
-    int supply,
-    int outValue) : bytes {
+    Ripemd160 holderPKH,
+    int outValue
+    ) : bytes {
+    //OPRETUNR + '20' + amount(32bytes) + '01' + authCount(1byte) + '14' + holderPKH(20bytes) + '06' + brfc(6bytes) + '02' + stateLen(2bytes)
+
     // write Token UTXO locking script
-    // authCount(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 53bytes(35)
-    bytes data = num2bin(authCount, 1) + ownerPKH + num2bin(supply, Util.TokenValueLen);
-    // 35<4c
-    bytes lockingScript = lockingScriptBody + num2bin(len(data), 1) + data;
-    bytes output = num2bin(outValue, Util.OutputValueLen) + Util.writeVarint(lockingScript);
-    return output;
+    bytes scriptCode = lockingScriptBody + b'20' +  num2bin(amount, Util.TokenValueLen) + b'01' + num2bin(authCount, 1) + b'14' + holderPKH + Util.TOKEN_BRFC_ID + b'023f00';
+
+    return Util.buildOutput(scriptCode, outValue);
   }
 
   public function buy(
@@ -29,7 +28,7 @@ contract TokenSale {
     Ripemd160 sellerPKH,
     int satoshiAmount,
     Ripemd160 changePKH,
-    int changeSatoshi,
+    int notifySatoshi,
     int outValue,
     bytes prevOutput,
     bytes tokenCodeScript,
@@ -39,8 +38,10 @@ contract TokenSale {
     require(tokenAmount > 0);
     require(satoshiAmount > 0);
 
+    SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
     // this ensures the preimage is for the current tx
-    require(Tx.checkPreimage(txPreimage));
+    require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
+    
     require(hash160(tokenCodeScript) == this.tokenCodeScriptHash);
 
     //outpoint (32-byte hash + 4-byte little endian)
@@ -55,21 +56,15 @@ contract TokenSale {
     bytes output0 = Util.buildOutput(Util.scriptCode(txPreimage), outValue);
 
     // Token UTXO
-    bytes output1 = this.buildTokenOutput(tokenCodeScript, 0, buyerPKH, tokenAmount, outValue);
+    bytes output1 = this.buildTokenOutput(tokenCodeScript, tokenAmount, 0, buyerPKH, outValue);
 
     // the sale satoshi output
     bytes output2 = Util.buildPublicKeyHashOutput(satoshiAmount, sellerPKH);
 
     // notify receiver output
-    bytes output3 = Util.buildNotificationOutput(buyerPKH);
+    bytes output3 = Util.buildPublicKeyHashOutput(notifySatoshi, buyerPKH);
 
-    // notify witness output
-    bytes output4 = Util.buildNotificationOutput(this.witnessPKH);
-
-    // the change output
-    bytes output5 = Util.buildPublicKeyHashOutput(changeSatoshi, changePKH);
-
-    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2 + output3 + output4 + output5);
+    Sha256 hashOutputs = hash256(prevOutput + output0 + output1 + output2 + output3);
     require(hashOutputs == Util.hashOutputs(txPreimage));
   }
 

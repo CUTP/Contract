@@ -44,6 +44,13 @@ contract TokenSwap {
     SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
     // this ensures the preimage is for the current tx
     require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
+
+    bytes scriptCode = Util.scriptCode(txPreimage);
+    int scriptLen = len(scriptCode);
+    int stateLenStart = scriptLen - 3; //'02' + stateLen(2bytes)
+    int brfcStart = stateLenStart - 7; //'06' + brfc(6bytes)
+    require(scriptCode[brfcStart : stateLenStart] == Util.SWAP_BRFC_ID); //b'06' + SWAP_BRFC_ID
+
     require(hash160(tokenA_CodeScript) == this.tokenA_ScriptHash);
     require(hash160(tokenB_CodeScript) == this.tokenB_ScriptHash);
 

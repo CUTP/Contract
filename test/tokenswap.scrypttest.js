@@ -10,9 +10,10 @@ const {
   SWAP_BRFC_ID,
   changTxForMSB,
 
-  genesisSchema,
-  batonSchema,
-  tokenSchema,
+  GenesisSchema,
+  BatonSchema,
+  TokenSchema,
+  SwapSchema,
   TokenValueLen
 
 } = require( '../helper' )
@@ -126,6 +127,12 @@ describe( 'SWAP UTXO Token', () => {
       witness0.pubKey
     )
 
+    const swapData = serializeState( {
+      brfc: SWAP_BRFC_ID
+    }, STATE_LEN_2BYTES, TokenSchema )
+
+    swap.setDataPart( swapData )
+
     // make a copy since it will be mutated
     const tx0 = bsv.Transaction.shallowCopy( tx )
 
@@ -161,7 +168,7 @@ describe( 'SWAP UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(toAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const tokenA_LockingScript = tokenA.codePart.toASM() + ' ' + tokenA_Data
     // console.log(tokenLockingScript)
@@ -178,7 +185,7 @@ describe( 'SWAP UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(issuerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const tokenB_LockingScript = tokenB.codePart.toASM() + ' ' + tokenB_Data
     // console.log(tokenLockingScript)
@@ -195,7 +202,7 @@ describe( 'SWAP UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(changeAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const changeToken_LockingScript = tokenB.codePart.toASM() + ' ' + changeToken_Data
     // console.log(tokenLockingScript)

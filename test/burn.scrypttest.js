@@ -9,9 +9,9 @@ const {
   TOKEN_BRFC_ID,
   changTxForMSB,
 
-  genesisSchema,
-  batonSchema,
-  tokenSchema
+  GenesisSchema,
+  BatonSchema,
+  TokenSchema
 
 } = require( '../helper' )
 
@@ -97,7 +97,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(ownerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
     console.log( token )

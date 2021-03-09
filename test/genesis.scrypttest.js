@@ -9,9 +9,9 @@ const {
   TOKEN_BRFC_ID,
   changTxForMSB,
 
-  genesisSchema,
-  batonSchema,
-  tokenSchema
+  GenesisSchema,
+  BatonSchema,
+  TokenSchema
 
 } = require( '../helper' )
 
@@ -75,7 +75,7 @@ describe( 'Controlled UTXO Token', () => {
       rule: 0,
       decimals: 0,
       brfc: CONTRACT_BRFC_ID
-    }, STATE_LEN_2BYTES, genesisSchema)
+    }, STATE_LEN_2BYTES, GenesisSchema)
     genesis.setDataPart( contractData )
     console.log( genesis )
 
@@ -85,7 +85,7 @@ describe( 'Controlled UTXO Token', () => {
     console.log( genesis.codePart.toASM() )
     console.log( genesis.dataPart.toASM() )
 
-    const deStates = deserializeState(genesis.dataPart.toHex(), genesisSchema)
+    const deStates = deserializeState(genesis.dataPart.toHex(), GenesisSchema)
     console.log(deStates)
 
     const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
@@ -119,7 +119,7 @@ describe( 'Controlled UTXO Token', () => {
       supply: num2bin(initialSupply, TokenValueLen),
       issuerPKH: toHex(issuerAddress.hashBuffer),
       brfc: BATON_BRFC_ID
-    }, STATE_LEN_2BYTES, batonSchema)
+    }, STATE_LEN_2BYTES, BatonSchema)
 
     baton.setDataPart( batonData )
     console.log( baton )
@@ -154,7 +154,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(issuerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
 

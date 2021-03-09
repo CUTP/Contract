@@ -9,9 +9,9 @@ const {
   TOKEN_BRFC_ID,
   changTxForMSB,
 
-  genesisSchema,
-  batonSchema,
-  tokenSchema
+  GenesisSchema,
+  BatonSchema,
+  TokenSchema
 
 } = require( '../helper' )
 
@@ -97,7 +97,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(ownerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
 
@@ -127,7 +127,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: newTokenAuthCount,
       holderPKH: toHex(toAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
@@ -146,7 +146,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: changeTokenAuthCount,
       holderPKH: toHex(changeAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const changeTokenLockingScript = lockingBodyScript + ' ' + changeTokenData
     console.log(changeTokenLockingScript)
@@ -276,7 +276,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(ownerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
     console.log( token )
@@ -304,7 +304,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: newTokenAuthCount,
       holderPKH: toHex(toAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
 
@@ -437,7 +437,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(ownerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
 
@@ -465,7 +465,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: newTokenAuthCount,
       holderPKH: toHex(toAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
@@ -596,7 +596,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(ownerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
 
@@ -638,7 +638,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: newTokenAuthCount,
       holderPKH: toHex(toAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
@@ -657,7 +657,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: changeTokenAuthCount,
       holderPKH: toHex(changeAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const changeTokenLockingScript = lockingBodyScript + ' ' + changeTokenData
     console.log(changeTokenLockingScript)
@@ -784,7 +784,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: 0,
       holderPKH: toHex(ownerAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     token.setDataPart(tokenData)
 
@@ -833,7 +833,7 @@ describe( 'Controlled UTXO Token', () => {
         authCount: 0,
         holderPKH: toHex(ownerAddress.hashBuffer),
         brfc: TOKEN_BRFC_ID
-      }, STATE_LEN_2BYTES, tokenSchema)
+      }, STATE_LEN_2BYTES, TokenSchema)
 
       const lockingScript = lockingBodyScript + ' ' + data
       tx0.addInput(new bsv.Transaction.Input({
@@ -857,7 +857,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: newTokenAuthCount,
       holderPKH: toHex(toAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const newTokenLockingScript = lockingBodyScript + ' ' + newTokenData
     const newTokenScript = bsv.Script.fromASM( newTokenLockingScript )
@@ -875,7 +875,7 @@ describe( 'Controlled UTXO Token', () => {
       authCount: changeTokenAuthCount,
       holderPKH: toHex(changeAddress.hashBuffer),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema)
 
     const changeTokenLockingScript = lockingBodyScript + ' ' + changeTokenData
     // console.log(changeTokenLockingScript)
@@ -899,7 +899,7 @@ describe( 'Controlled UTXO Token', () => {
         authCount: 0,
         holderPKH: toHex(ownerAddress.hashBuffer),
         brfc: TOKEN_BRFC_ID
-      }, STATE_LEN_2BYTES, tokenSchema)
+      }, STATE_LEN_2BYTES, TokenSchema)
 
       const prevLockingScript = lockingBodyScript + ' ' + data
 

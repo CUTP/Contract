@@ -110,7 +110,7 @@ const NFT_CERT_BRFC_ID = 'c7f0eab6f355'
 const NFT_SALE_BRFC_ID = 'a2d7f217c2c0'
 const NFT_SWAP_BRFC_ID = '35a30d90364c'
 
-const genesisSchema = {
+const GenesisSchema = {
   name: 'string',
   symbol: 'string',
   issuer: 'string',
@@ -120,16 +120,24 @@ const genesisSchema = {
   brfc: 'bytes'
 }
 
-const batonSchema = {
+const BatonSchema = {
   supply: 'bytes',
   issuerPKH: 'bytes',
   brfc: 'bytes'
 }
 
-const tokenSchema = {
+const TokenSchema = {
   amount: 'bytes', // fixed 32bytes number
   authCount: 'number',
   holderPKH: 'bytes',
+  brfc: 'bytes'
+}
+
+const SaleSchema = {
+  brfc: 'bytes'
+}
+
+const SwapSchema = {
   brfc: 'bytes'
 }
 
@@ -192,7 +200,9 @@ module.exports = {
 
   UnlockingScriptSize,
 
-  genesisSchema,
-  batonSchema,
-  tokenSchema
+  GenesisSchema,
+  BatonSchema,
+  TokenSchema,
+  SaleSchema,
+  SwapSchema
 }

@@ -10,9 +10,10 @@ const {
   SALE_BRFC_ID,
   changTxForMSB,
 
-  genesisSchema,
-  batonSchema,
-  tokenSchema,
+  GenesisSchema,
+  BatonSchema,
+  TokenSchema,
+  SaleSchema,
   TokenValueLen
 } = require( '../helper' )
 
@@ -73,22 +74,22 @@ describe( 'Sale UTXO Token', () => {
     const changeAddress = privateKey1.toAddress()
 
     const token = new Token(
-      new Bytes(contractId),
+      new Bytes( contractId ),
       [
-        BigInt(0),
+        BigInt( 0 ),
         witness0.pubKey,
         witness1.pubKey,
         witness2.pubKey
       ],
       25 )
 
-    console.log(token.asmVars)
+    console.log( token.asmVars )
     const asmVars = token.asmVars
     const witnessList = [
-      bin2num(asmVars['witnesses[0]']),
-      bin2num(asmVars['witnesses[1]']),
-      bin2num(asmVars['witnesses[2]']),
-      bin2num(asmVars['witnesses[3]'])
+      bin2num( asmVars[ 'witnesses[0]' ] ),
+      bin2num( asmVars[ 'witnesses[1]' ] ),
+      bin2num( asmVars[ 'witnesses[2]' ] ),
+      bin2num( asmVars[ 'witnesses[3]' ] )
     ]
 
     // code part
@@ -100,18 +101,23 @@ describe( 'Sale UTXO Token', () => {
     const tokenHash = bsv.crypto.Hash.sha256ripemd160( tokenCodeScript )
 
     const sale = new TokenSale(
-      new Bytes(SALE_BRFC_ID),
-      new Bytes(contractId),
+      new Bytes( contractId ),
       new Ripemd160( toHex( tokenHash ) ),
-      new Ripemd160( toHex( issuerAddress.hashBuffer) ),
+      new Ripemd160( toHex( issuerAddress.hashBuffer ) ),
       witness0.pubKey
     )
-    console.log(sale.asmVars)
+    console.log( sale.asmVars )
+
+    const saleData = serializeState( {
+      brfc: SALE_BRFC_ID
+    }, STATE_LEN_2BYTES, TokenSchema )
+
+    sale.setDataPart( saleData )
 
     // make a copy since it will be mutated
     const tx0 = bsv.Transaction.shallowCopy( tx )
 
-    const saleLockingScript = new bsv.Script(sale.lockingScript)
+    const saleLockingScript = new bsv.Script( sale.lockingScript )
 
     tx0.addOutput( new bsv.Transaction.Output( {
       script: saleLockingScript,
@@ -122,31 +128,31 @@ describe( 'Sale UTXO Token', () => {
     const tokenSupply = 300
 
     // 获取价格认证
-    const witness = getWitnessByPubKey(witness0.pubKey)
-    const { signature: rabinSigs, paddingBytes, order } = witness.sale({
+    const witness = getWitnessByPubKey( witness0.pubKey )
+    const { signature: rabinSigs, paddingBytes, order } = witness.sale( {
       contractId: contractId,
       buyerPKH: toHex( toAddress.hashBuffer ),
       tokenAmount: tokenSupply,
       sellerPKH: toHex( issuerAddress.hashBuffer ), // Mock
-      outpoint: reversedDummyTxId + num2bin(inputIndex, 4) // Mock
-    })
+      outpoint: reversedDummyTxId + num2bin( inputIndex, 4 ) // Mock
+    } )
 
-    console.log(order)
+    console.log( order )
 
     // count(1byte) + ownerPkh(20bytes) + tokenAmount(32bytes) = 91bytes(5b)
     // const tokenData = num2bin( tokenAuthCount, 1 ) + toHex( toAddress.hashBuffer ) + num2bin( order.tokenAmount, 32 )
     // codePart + OP_RETURN tokenAmount(32bytes) authCount(1byte) ownerPkh(20bytes) TOKEN_BRFC_ID
-    const tokenData = serializeState({
-      amount: num2bin(order.tokenAmount, TokenValueLen),
+    const tokenData = serializeState( {
+      amount: num2bin( order.tokenAmount, TokenValueLen ),
       authCount: 0,
-      holderPKH: toHex(toAddress.hashBuffer),
+      holderPKH: toHex( toAddress.hashBuffer ),
       brfc: TOKEN_BRFC_ID
-    }, STATE_LEN_2BYTES, tokenSchema)
+    }, STATE_LEN_2BYTES, TokenSchema )
 
     const tokenLockingScript = tokenCodeScriptASM + ' ' + tokenData
-    console.log(tokenLockingScript)
+    console.log( tokenLockingScript )
     const tokenScript = bsv.Script.fromASM( tokenLockingScript )
-    console.log(tokenScript.toBuffer().toString('hex'))
+    console.log( tokenScript.toBuffer().toString( 'hex' ) )
 
     // 输出token
     tx0.addOutput( new bsv.Transaction.Output( {
@@ -170,13 +176,13 @@ describe( 'Sale UTXO Token', () => {
     const preimage = getPreimage( tx0, prevLockingScript, inputSatoshis, 0, sighashType )
     console.log( preimage.outpoint )
 
-    expect(toHex( saleLockingScript.toBuffer())).is.eql(preimage.scriptCode)
+    expect( toHex( saleLockingScript.toBuffer() ) ).is.eql( preimage.scriptCode )
 
     const prevOutput = ''
 
-    console.log( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenAmount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.satoshiAmount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), new Bytes(toHex( tokenCodeScript)), preimage, rabinSigs, new Bytes(paddingBytes) )
+    console.log( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenAmount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.satoshiAmount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), NOTIFY_SATOSHI, holderSatoshi, new Bytes( prevOutput ), new Bytes( toHex( tokenCodeScript ) ), preimage, rabinSigs, new Bytes( paddingBytes ) )
 
-    const buyFn = sale.buy( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenAmount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.satoshiAmount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), NOTIFY_SATOSHI, holderSatoshi, new Bytes(prevOutput), new Bytes(toHex( tokenCodeScript)), preimage, rabinSigs, new Bytes(paddingBytes) )
+    const buyFn = sale.buy( new Ripemd160( toHex( toAddress.hashBuffer ) ), new Int( order.tokenAmount ), new Ripemd160( toHex( issuerAddress.hashBuffer ) ), new Int( order.satoshiAmount ), new Ripemd160( toHex( changeAddress.hashBuffer ) ), NOTIFY_SATOSHI, holderSatoshi, new Bytes( prevOutput ), new Bytes( toHex( tokenCodeScript ) ), preimage, rabinSigs, new Bytes( paddingBytes ) )
 
     const unlockingScript = buyFn.toScript()
 
@@ -193,21 +199,21 @@ describe( 'Sale UTXO Token', () => {
 
     console.log( 'Pre-Transaction Size', tx0._estimateFee() )
 
-    tx0.feePerKb(500)
-    console.log('Tx getFee', tx0.getFee(), tx0._estimateFee())
+    tx0.feePerKb( 500 )
+    console.log( 'Tx getFee', tx0.getFee(), tx0._estimateFee() )
     const needFee = tx0._estimateFee() - tx0.getFee()
-    console.log('Tx Fee', needFee)
+    console.log( 'Tx Fee', needFee )
     // 准备一个所需的费用输出
     tx0.addInput(
-      new bsv.Transaction.Input({
+      new bsv.Transaction.Input( {
         prevTxId: dummyTxId,
         outputIndex: 1,
         script: ''
-      }),
-      bsv.Script.fromASM('OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG'),
+      } ),
+      bsv.Script.fromASM( 'OP_DUP OP_HASH160 05a24d44e37cae0f4e231514c3ad512d313b1416 OP_EQUALVERIFY OP_CHECKSIG' ),
       needFee
     )
-    console.log('Tx result getFee', tx0.getFee(), tx0._estimateFee())
+    console.log( 'Tx result getFee', tx0.getFee(), tx0._estimateFee() )
 
     const context = { tx: tx0, inputIndex, inputSatoshis }
     // console.log( `"hex": "${tx0.serialize()}"`, inputIndex, inputSatoshis )
